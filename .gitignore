@@ -1,0 +1,46 @@
+# Virtual Enviroment
+venv/
+env/
+.venv/
+.virtualenv/
+
+# Compiled Files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# IDE configuration
+.idea/
+.vscode/
+*.iml
+
+# cache files
+*.egg-info/
+*.cache/
+*.pyo
+dist/
+build/
+pip-wheel-metadata/
+
+# temp files
+.coverage
+nosetests.xml
+tox.ini
+*~
+*.log
+*.swp
+*.swo
+
+# processed files
+/temp
+*.csv
+*.txt
+*.keras
+*.pkl
+
+# enviroment variables
+.env
+
+# includes requirements.txt
+!requirements.txt
