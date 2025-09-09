@@ -8,6 +8,6 @@ def ping_mongo(uri: str) -> HealthResult:
     try:
         client: MongoClient = MongoClient(uri, serverSelectionTimeoutMS=1500)
         client.admin.command("ping")
-        return {"ok": True, "error": None}
+        return HealthResult(ok=True)
     except PyMongoError as e:
-        return {"ok": False, "error": str(e)}
+        return HealthResult(ok=False, error=str(e))

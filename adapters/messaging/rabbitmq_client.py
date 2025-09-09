@@ -13,6 +13,6 @@ def ping_rabbitmq(amqp_url: str) -> HealthResult:
             channel.close()
         finally:
             connection.close()
-        return {"ok": True, "error": None}
+        return HealthResult(ok=True)
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return HealthResult(ok=False, error=str(e))

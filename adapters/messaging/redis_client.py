@@ -11,6 +11,6 @@ def ping_redis(url: str) -> HealthResult:
             socket_timeout=1.5,
         )
         pong = r.ping()
-        return {"ok": bool(pong), "error": None}
+        return HealthResult(ok=bool(pong))
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return HealthResult(ok=False, error=str(e))
