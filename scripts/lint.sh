@@ -6,3 +6,4 @@ cd "$(dirname "$0")/.."
 echo "Running flake8 and mypy"
 python -m flake8 .
 python -m mypy .
+pre-commit run --all-files
