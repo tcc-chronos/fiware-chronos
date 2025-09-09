@@ -43,8 +43,9 @@ pre-commit run --all-files
 ### Comandos disponíveis
 
 ```
-make dev-up   # sobe docker compose
-make run      # roda uvicorn local com env
-make format   # black + isort
-make lint     # flake8 + mypy
+make up ARGS="--build -d"   # sobe docker compose com os parametros opcionais
+make stop                   # interrompe os containers
+make run                    # roda uvicorn local com env
+make format                 # black + isort
+make lint                   # flake8 + mypy
 ```

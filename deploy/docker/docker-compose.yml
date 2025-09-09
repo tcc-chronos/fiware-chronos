@@ -12,6 +12,10 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: chronos
+      RABBITMQ_DEFAULT_PASS: chronos
+      RABBITMQ_DEFAULT_VHOST: chronos
 
   redis:
     image: redis:7
@@ -19,18 +23,18 @@ services:
     ports: ["6379:6379"]
     command: ["redis-server", "--appendonly", "yes"]
 
-  worker:
-    build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile.worker
-    restart: unless-stopped
-    env_file:
-      - ../../.env
-    environment:
-      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/chronos}
-      BROKER_URL: ${BROKER_URL:-amqp://guest:guest@rabbitmq:5672//}
-      RESULT_BACKEND: ${RESULT_BACKEND:-redis://redis:6379/0}
-    depends_on: [mongo, rabbitmq, redis]
+  # worker:
+  #   build:
+  #     context: ../..
+  #     dockerfile: deploy/docker/Dockerfile.worker
+  #   restart: unless-stopped
+  #   env_file:
+  #     - ../../.env
+  #   environment:
+  #     MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/chronos}
+  #     BROKER_URL: ${BROKER_URL:-amqp://chronos:chronos@rabbitmq:5672/chronos}
+  #     RESULT_BACKEND: ${RESULT_BACKEND:-redis://redis:6379/0}
+  #   depends_on: [mongo, rabbitmq, redis]
 
   loki:
     image: grafana/loki:2.9.0
@@ -64,7 +68,7 @@ services:
       - ../../.env
     environment:
       MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/chronos}
-      BROKER_URL: ${BROKER_URL:-amqp://guest:guest@rabbitmq:5672//}
+      BROKER_URL: ${BROKER_URL:-amqp://chronos:chronos@rabbitmq:5672/chronos}
       RESULT_BACKEND: ${RESULT_BACKEND:-redis://redis:6379/0}
       APP_NAME: ${APP_NAME:-chronos-ge}
       APP_VERSION: ${APP_VERSION:-0.1.0}

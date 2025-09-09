@@ -1,7 +1,10 @@
-.PHONY: dev-up run format lint
+.PHONY: up stop run format lint
 
-dev-up:
-	./scripts/dev_up.sh
+up:
+	./scripts/docker/docker_up.sh $(ARGS)
+
+stop:
+	./scripts/docker/docker_stop.sh
 
 run:
 	./scripts/run_api.sh
