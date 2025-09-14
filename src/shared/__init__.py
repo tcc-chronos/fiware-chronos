@@ -16,8 +16,12 @@ Following Clean Architecture principles:
 """
 
 from .consts import EnumEnvironment, EnumLogLevel
+from .logging import configure_logging, get_logger, update_logging_from_settings
 
 __all__ = [
     "EnumEnvironment",
     "EnumLogLevel",
+    "configure_logging",
+    "get_logger",
+    "update_logging_from_settings",
 ]
