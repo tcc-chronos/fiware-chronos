@@ -3,7 +3,5 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-echo "Running flake8 and mypy"
-python -m flake8 .
-python -m mypy .
+echo "Running lint checks with pre-commit"
 pre-commit run --all-files

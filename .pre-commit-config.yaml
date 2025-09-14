@@ -27,7 +27,7 @@ repos:
     hooks:
       - id: mypy
         args: ["--config-file", "mypy.ini"]
-        files: "^(apps|core|adapters|pkg|config)/.*\\.py$"
+        files: "^src/.*\\.py$"
         additional_dependencies:
           - pydantic==2.9.2
           - pydantic-settings==2.4.0

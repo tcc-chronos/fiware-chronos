@@ -19,4 +19,4 @@ ENV BUILD_TIME=$BUILD_TIME
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn apps.api.main:app --host 0.0.0.0 --port ${API_PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn src.main.app:app --host 0.0.0.0 --port ${API_PORT:-8000}"]

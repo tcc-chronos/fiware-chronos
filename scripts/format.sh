@@ -3,6 +3,6 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-echo "Formating code with black and isort"
-python -m black .
-python -m isort .
+echo "Formatting code using pre-commit hooks"
+pre-commit run black --all-files
+pre-commit run isort --all-files

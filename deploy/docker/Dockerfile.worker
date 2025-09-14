@@ -14,4 +14,6 @@ COPY . .
 
 EXPOSE 5555
 
-CMD ["celery", "-A", "apps.worker.celery_app.celery_app", "worker", "-l", "info", "-Q", "ml.train,io.sth_fetch,predict.batch"]
+# Comentado pois precisa ser implementado o novo módulo celery_app na nova estrutura
+# CMD ["celery", "-A", "src.infrastructure.worker.celery_app.celery_app", "worker", "-l", "info", "-Q", "ml.train,io.sth_fetch,predict.batch"]
+CMD ["echo", "Worker service needs to be reimplemented in the new structure"]
