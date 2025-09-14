@@ -12,8 +12,12 @@ Its primary responsibilities include:
 """
 
 from .config import AppSettings, get_settings
+from .container import AppContainer, get_container, init_container
 
 __all__ = [
     "AppSettings",
     "get_settings",
+    "AppContainer",
+    "init_container",
+    "get_container",
 ]
