@@ -54,9 +54,14 @@ class ModelCreateDTO(BaseModel):
     )
 
     # Hyperparameters
-    dropout: float = Field(default=0.2, description="Dropout rate", ge=0.0, le=0.9)
-    recurrent_dropout: float = Field(
-        default=0.0, description="Recurrent dropout rate", ge=0.0, le=0.9
+    rnn_dropout: float = Field(
+        default=0.0,
+        description="Dropout rate for recurrent connections in RNN layers",
+        ge=0.0,
+        le=0.9,
+    )
+    dense_dropout: float = Field(
+        default=0.2, description="Dropout rate for dense layers", ge=0.0, le=0.9
     )
     batch_size: int = Field(
         default=32, description="Batch size for training", ge=1, le=1024
@@ -159,7 +164,8 @@ class ModelCreateDTO(BaseModel):
                 "name": "Temperature Forecasting Model",
                 "description": "LSTM model for temperature forecasting",
                 "model_type": "lstm",
-                "dropout": 0.2,
+                "rnn_dropout": 0,
+                "dense_dropout": 0.2,
                 "batch_size": 32,
                 "epochs": 100,
                 "learning_rate": 0.001,
@@ -185,9 +191,14 @@ class ModelUpdateDTO(BaseModel):
     description: Optional[str] = Field(None, description="Description of the model")
 
     # Hyperparameters
-    dropout: Optional[float] = Field(None, description="Dropout rate", ge=0.0, le=0.9)
-    recurrent_dropout: Optional[float] = Field(
-        None, description="Recurrent dropout rate", ge=0.0, le=0.9
+    rnn_dropout: Optional[float] = Field(
+        None,
+        description="Dropout rate for recurrent connections in RNN layers",
+        ge=0.0,
+        le=0.9,
+    )
+    dense_dropout: Optional[float] = Field(
+        None, description="Dropout rate for dense layers", ge=0.0, le=0.9
     )
     batch_size: Optional[int] = Field(
         None, description="Batch size for training", ge=1, le=1024
@@ -268,7 +279,8 @@ class ModelUpdateDTO(BaseModel):
                 "dense_units": [64, 32],
                 "epochs": 150,
                 "batch_size": 64,
-                "dropout": 0.3,
+                "rnn_dropout": 0.2,
+                "dense_dropout": 0.3,
                 "learning_rate": 0.0005,
                 "feature": "temperatura",
             }
@@ -286,8 +298,8 @@ class ModelResponseDTO(BaseModel):
     status: ModelStatus
 
     # Hyperparameters
-    dropout: float
-    recurrent_dropout: float
+    dense_dropout: float
+    rnn_dropout: float
     batch_size: int
     epochs: int
     learning_rate: float
@@ -318,8 +330,8 @@ class ModelResponseDTO(BaseModel):
                 "description": "LSTM model for temperature forecasting",
                 "model_type": "lstm",
                 "status": "draft",
-                "dropout": 0.2,
-                "recurrent_dropout": 0.0,
+                "rnn_dropout": 0.0,
+                "dense_dropout": 0.2,
                 "batch_size": 32,
                 "epochs": 100,
                 "learning_rate": 0.001,
@@ -353,8 +365,8 @@ class ModelDetailResponseDTO(ModelResponseDTO):
                 "description": "LSTM model for temperature forecasting",
                 "model_type": "lstm",
                 "status": "trained",
-                "dropout": 0.2,
-                "recurrent_dropout": 0.0,
+                "rnn_dropout": 0.0,
+                "dense_dropout": 0.2,
                 "batch_size": 32,
                 "epochs": 100,
                 "learning_rate": 0.001,

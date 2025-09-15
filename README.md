@@ -184,7 +184,8 @@ curl -X POST "http://localhost:8000/models" \
     "name": "Modelo de Previsão de Temperatura",
     "description": "LSTM para previsão de temperatura",
     "model_type": "lstm",
-    "dropout": 0.2,
+    "dense_dropout": 0.2,
+    "rnn_dropout": 0,
     "batch_size": 32,
     "epochs": 100,
     "learning_rate": 0.001,
@@ -211,7 +212,7 @@ curl -X PATCH "http://localhost:8000/models/3fa85f64-5717-4562-b3fc-2c963f66afa6
     "dense_units": [64, 32],
     "epochs": 150,
     "batch_size": 64,
-    "dropout": 0.3,
+    "rnn_dropout": 0.3,
     "learning_rate": 0.0005,
     "feature": "temperatura"
   }'
@@ -242,8 +243,8 @@ Principais atributos:
 - `status`: Status atual do modelo
 
 Hiperparâmetros:
-- `dropout`: Taxa de dropout para regularização
-- `recurrent_dropout`: Taxa de dropout para conexões recorrentes
+- `rnn_dropout`: Taxa de dropout para conexões recorrentes nas camadas RNN
+- `dense_dropout`: Taxa de dropout para camadas densas
 - `batch_size`: Tamanho do batch para treinamento
 - `epochs`: Número de épocas de treinamento
 - `learning_rate`: Taxa de aprendizado

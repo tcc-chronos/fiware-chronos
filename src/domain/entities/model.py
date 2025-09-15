@@ -54,8 +54,8 @@ class Model:
     status: ModelStatus = ModelStatus.DRAFT
 
     # Hyperparameters
-    dropout: float = 0.2
-    recurrent_dropout: float = 0.0
+    rnn_dropout: float = 0.0
+    dense_dropout: float = 0.2
     batch_size: int = 32
     epochs: int = 100
     learning_rate: float = 0.001

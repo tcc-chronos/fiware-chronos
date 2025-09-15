@@ -55,8 +55,8 @@ class GetModelsUseCase:
             description=model.description,
             model_type=model.model_type,
             status=model.status,
-            dropout=model.dropout,
-            recurrent_dropout=model.recurrent_dropout,
+            rnn_dropout=model.rnn_dropout,
+            dense_dropout=model.dense_dropout,
             batch_size=model.batch_size,
             epochs=model.epochs,
             learning_rate=model.learning_rate,
@@ -122,8 +122,8 @@ class GetModelByIdUseCase:
             description=model.description,
             model_type=model.model_type,
             status=model.status,
-            dropout=model.dropout,
-            recurrent_dropout=model.recurrent_dropout,
+            rnn_dropout=model.rnn_dropout,
+            dense_dropout=model.dense_dropout,
             batch_size=model.batch_size,
             epochs=model.epochs,
             learning_rate=model.learning_rate,
@@ -179,8 +179,8 @@ class CreateModelUseCase:
             name=name,
             description=description,
             model_type=model_dto.model_type,
-            dropout=model_dto.dropout,
-            recurrent_dropout=model_dto.recurrent_dropout,
+            rnn_dropout=model_dto.rnn_dropout,
+            dense_dropout=model_dto.dense_dropout,
             batch_size=model_dto.batch_size,
             epochs=model_dto.epochs,
             learning_rate=model_dto.learning_rate,
@@ -206,8 +206,8 @@ class CreateModelUseCase:
             description=created_model.description,
             model_type=created_model.model_type,
             status=created_model.status,
-            dropout=created_model.dropout,
-            recurrent_dropout=created_model.recurrent_dropout,
+            rnn_dropout=created_model.rnn_dropout,
+            dense_dropout=created_model.dense_dropout,
             batch_size=created_model.batch_size,
             epochs=created_model.epochs,
             learning_rate=created_model.learning_rate,
@@ -263,11 +263,11 @@ class UpdateModelUseCase:
         if model_dto.description is not None:
             model.description = model_dto.description
 
-        if model_dto.dropout is not None:
-            model.dropout = model_dto.dropout
+        if model_dto.rnn_dropout is not None:
+            model.rnn_dropout = model_dto.rnn_dropout
 
-        if model_dto.recurrent_dropout is not None:
-            model.recurrent_dropout = model_dto.recurrent_dropout
+        if model_dto.dense_dropout is not None:
+            model.dense_dropout = model_dto.dense_dropout
 
         if model_dto.batch_size is not None:
             model.batch_size = model_dto.batch_size
@@ -332,8 +332,8 @@ class UpdateModelUseCase:
             description=updated_model.description,
             model_type=updated_model.model_type,
             status=updated_model.status,
-            dropout=updated_model.dropout,
-            recurrent_dropout=updated_model.recurrent_dropout,
+            rnn_dropout=updated_model.rnn_dropout,
+            dense_dropout=updated_model.dense_dropout,
             batch_size=updated_model.batch_size,
             epochs=updated_model.epochs,
             learning_rate=updated_model.learning_rate,
