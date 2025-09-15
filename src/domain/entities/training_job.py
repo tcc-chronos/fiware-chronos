@@ -7,7 +7,7 @@ without dependencies on external frameworks or infrastructure.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -102,12 +102,12 @@ class TrainingJob:
     error_details: Optional[Dict[str, Any]] = None
 
     # Audit
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def update_timestamp(self) -> None:
         """Update the 'updated_at' timestamp to current time."""
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def add_data_collection_job(self, job: DataCollectionJob) -> None:
         """Add a data collection job to this training job."""
@@ -124,20 +124,20 @@ class TrainingJob:
 
     def mark_data_collection_complete(self) -> None:
         """Mark data collection phase as complete."""
-        self.data_collection_end = datetime.utcnow()
+        self.data_collection_end = datetime.now(timezone.utc)
         self.update_timestamp()
 
     def mark_preprocessing_complete(self) -> None:
         """Mark preprocessing phase as complete."""
-        self.preprocessing_end = datetime.utcnow()
+        self.preprocessing_end = datetime.now(timezone.utc)
         self.update_timestamp()
 
     def mark_training_complete(self, metrics: TrainingMetrics) -> None:
         """Mark training phase as complete with metrics."""
-        self.training_end = datetime.utcnow()
+        self.training_end = datetime.now(timezone.utc)
         self.metrics = metrics
         self.status = TrainingStatus.COMPLETED
-        self.end_time = datetime.utcnow()
+        self.end_time = datetime.now(timezone.utc)
         self.update_timestamp()
 
     def mark_failed(
@@ -147,7 +147,7 @@ class TrainingJob:
         self.status = TrainingStatus.FAILED
         self.error = error
         self.error_details = error_details
-        self.end_time = datetime.utcnow()
+        self.end_time = datetime.now(timezone.utc)
         self.update_timestamp()
 
     def get_total_duration(self) -> Optional[float]:

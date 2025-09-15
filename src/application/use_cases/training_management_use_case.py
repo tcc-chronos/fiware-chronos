@@ -4,7 +4,7 @@ Application Use Cases - Training Management
 This module contains use cases for managing training jobs.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -109,7 +109,7 @@ class TrainingManagementUseCase:
                 model_id=model_id,
                 last_n=request.last_n,
                 total_data_points_requested=request.last_n,
-                start_time=datetime.utcnow(),
+                start_time=datetime.now(timezone.utc),
             )
 
             # Save training job

@@ -5,7 +5,7 @@ This module contains Celery tasks for asynchronous data collection and model tra
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 from uuid import UUID
 
@@ -101,7 +101,7 @@ def collect_data_chunk(
                 UUID(training_job_id),
                 UUID(job_id),
                 DataCollectionStatus.IN_PROGRESS,
-                start_time=datetime.utcnow(),
+                start_time=datetime.now(timezone.utc),
             )
         )
 
@@ -130,7 +130,7 @@ def collect_data_chunk(
                 UUID(training_job_id),
                 UUID(job_id),
                 DataCollectionStatus.COMPLETED,
-                end_time=datetime.utcnow(),
+                end_time=datetime.now(timezone.utc),
                 data_points_collected=len(collected_data),
             )
         )
@@ -171,7 +171,7 @@ def collect_data_chunk(
                     UUID(training_job_id),
                     UUID(job_id),
                     DataCollectionStatus.FAILED,
-                    end_time=datetime.utcnow(),
+                    end_time=datetime.now(timezone.utc),
                     error=str(exc),
                 )
             )
@@ -242,7 +242,7 @@ def train_model_task(
             training_job_repo.update_training_job_status(
                 UUID(training_job_id),
                 TrainingStatus.TRAINING,
-                training_start=datetime.utcnow(),
+                training_start=datetime.now(timezone.utc),
             )
         )
 
@@ -408,7 +408,7 @@ def orchestrate_training(
             training_job_repo.update_training_job_status(
                 UUID(training_job_id),
                 TrainingStatus.COLLECTING_DATA,
-                data_collection_start=datetime.utcnow(),
+                data_collection_start=datetime.now(timezone.utc),
             )
         )
 
@@ -477,8 +477,8 @@ def orchestrate_training(
             training_job_repo.update_training_job_status(
                 UUID(training_job_id),
                 TrainingStatus.PREPROCESSING,
-                data_collection_end=datetime.utcnow(),
-                preprocessing_start=datetime.utcnow(),
+                data_collection_end=datetime.now(timezone.utc),
+                preprocessing_start=datetime.now(timezone.utc),
                 total_data_points_collected=len(all_data_points),
             )
         )

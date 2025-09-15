@@ -7,7 +7,7 @@ without dependencies on external frameworks or infrastructure.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -35,7 +35,7 @@ class Training:
     """Represents a training instance of a model."""
 
     id: UUID = field(default_factory=uuid4)
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: Optional[datetime] = None
     metrics: Dict[str, float] = field(default_factory=dict)
     dataset_info: Dict[str, Any] = field(default_factory=dict)
@@ -74,14 +74,14 @@ class Model:
     entity_id: Optional[str] = None
 
     # Other attributes
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = field(default_factory=dict)
     trainings: List[Training] = field(default_factory=list)
 
     def update_timestamp(self) -> None:
         """Update the 'updated_at' timestamp to current time."""
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def add_training(self, training: Training) -> None:
         """Add a new training instance to this model."""

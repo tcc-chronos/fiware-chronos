@@ -4,7 +4,7 @@ Infrastructure Repository - Training Job MongoDB Implementation
 This module implements the training job repository using MongoDB.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -192,7 +192,7 @@ class TrainingJobRepository(ITrainingJobRepository):
                 {"id": str(training_job_id)},
                 {
                     "$push": {"data_collection_jobs": job_doc},
-                    "$set": {"updated_at": datetime.utcnow().isoformat()},
+                    "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
                 },
             )
 
@@ -224,7 +224,7 @@ class TrainingJobRepository(ITrainingJobRepository):
             # Build update document
             update_fields = {
                 "data_collection_jobs.$.status": status.value,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
             if start_time:
@@ -276,7 +276,7 @@ class TrainingJobRepository(ITrainingJobRepository):
             # Build update document
             update_fields = {
                 "status": status.value,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
             if data_collection_start:
@@ -346,13 +346,13 @@ class TrainingJobRepository(ITrainingJobRepository):
                 {
                     "$set": {
                         "status": TrainingStatus.COMPLETED.value,
-                        "end_time": datetime.utcnow().isoformat(),
+                        "end_time": datetime.now(timezone.utc).isoformat(),
                         "metrics": metrics_dict,
                         "model_artifact_path": model_artifact_path,
                         "x_scaler_path": x_scaler_path,
                         "y_scaler_path": y_scaler_path,
                         "metadata_path": metadata_path,
-                        "updated_at": datetime.utcnow().isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
                     }
                 },
             )
@@ -380,10 +380,10 @@ class TrainingJobRepository(ITrainingJobRepository):
                 {
                     "$set": {
                         "status": TrainingStatus.FAILED.value,
-                        "end_time": datetime.utcnow().isoformat(),
+                        "end_time": datetime.now(timezone.utc).isoformat(),
                         "error": error,
                         "error_details": error_details,
-                        "updated_at": datetime.utcnow().isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
                     }
                 },
             )
