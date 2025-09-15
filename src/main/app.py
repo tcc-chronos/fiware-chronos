@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.main.config import get_settings
 from src.main.container import app_lifespan, init_container
 from src.presentation.controllers import devices_router, models_router
+from src.presentation.controllers.training_controller import router as training_router
 from src.shared import configure_logging, get_logger, update_logging_from_settings
 
 # Configure logging with basic settings first - before configuration is loaded
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(models_router)
     app.include_router(devices_router)
+    app.include_router(training_router)
 
     return app
 

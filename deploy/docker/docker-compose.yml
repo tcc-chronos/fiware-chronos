@@ -22,18 +22,36 @@ services:
     ports: ["6379:6379"]
     command: ["redis-server", "--appendonly", "yes"]
 
-  # worker:
-  #   build:
-  #     context: ../..
-  #     dockerfile: deploy/docker/Dockerfile.worker
-  #   restart: unless-stopped
-  #   env_file:
-  #     - ../../.env
-  #   environment:
-  #     MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/chronos}
-  #     BROKER_URL: ${BROKER_URL:-amqp://chronos:chronos@rabbitmq:5672/chronos}
-  #     RESULT_BACKEND: ${RESULT_BACKEND:-redis://redis:6379/0}
-  #   depends_on: [mongo, rabbitmq, redis]
+  # FIWARE STH-Comet (Mock/Demo service)
+  sth-comet:
+    image: fiware/sth-comet:2.10.0
+    restart: unless-stopped
+    ports:
+      - "8666:8666"
+    environment:
+      STH_HOST: "0.0.0.0"
+      STH_PORT: "8666"
+      DB_URI: "mongodb://mongo:27017/sth_chronos"
+      LOGOPS_LEVEL: "INFO"
+    depends_on: [mongo]
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.worker
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      DB_MONGO_URI: ${DB_MONGO_URI:-mongodb://mongo:27017/chronos}
+      DB_DATABASE_NAME: ${DB_DATABASE_NAME:-chronos}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      FIWARE_STH_URL: ${FIWARE_STH_URL:-http://sth-comet:8666}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    depends_on: [mongo, rabbitmq, redis, sth-comet]
+    volumes:
+      - trained_models:/tmp/models
 
   loki:
     image: grafana/loki:2.9.0
@@ -68,8 +86,9 @@ services:
     environment:
       DB_MONGO_URI: ${DB_MONGO_URI:-mongodb://mongo:27017/chronos}
       DB_DATABASE_NAME: ${DB_DATABASE_NAME:-chronos}
-      BROKER_URL: ${BROKER_URL:-amqp://chronos:chronos@rabbitmq:5672/chronos}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      FIWARE_STH_URL: ${FIWARE_STH_URL:-http://sth-comet:8666}
       GE_TITLE: ${GE_TITLE:-chronos-ge}
       GE_VERSION: ${GE_VERSION:-0.1.0}
       GE_PORT: ${GE_PORT:-8000}
@@ -78,7 +97,10 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-development}
     ports:
       - "${GE_PORT:-8000}:${GE_PORT:-8000}"
-    depends_on: [ mongo, rabbitmq, redis ]
+    depends_on: [ mongo, rabbitmq, redis, sth-comet ]
+    volumes:
+      - trained_models:/tmp/models
 
 volumes:
   mongo_data:
+  trained_models:

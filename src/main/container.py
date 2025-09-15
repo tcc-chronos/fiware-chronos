@@ -19,9 +19,16 @@ from src.application.use_cases.model_use_cases import (
     GetModelsUseCase,
     UpdateModelUseCase,
 )
+from src.application.use_cases.training_management_use_case import (
+    TrainingManagementUseCase,
+)
 from src.infrastructure.database import MongoDatabase
 from src.infrastructure.gateways.iot_agent_gateway import IoTAgentGateway
+from src.infrastructure.gateways.sth_comet_gateway import STHCometGateway
 from src.infrastructure.repositories.model_repository import ModelRepository
+from src.infrastructure.repositories.training_job_repository import (
+    TrainingJobRepository,
+)
 
 from .config import AppSettings
 
@@ -50,10 +57,20 @@ class AppContainer(containers.DeclarativeContainer):
         mongo_database=mongo_database,
     )
 
+    training_job_repository = providers.Singleton(
+        TrainingJobRepository,
+        database=mongo_database,
+    )
+
     # Gateways
     iot_agent_gateway = providers.Singleton(
         IoTAgentGateway,
         iot_agent_url=config.fiware.iot_agent_url,
+    )
+
+    sth_comet_gateway = providers.Singleton(
+        STHCometGateway,
+        base_url=config.fiware.sth_url,
     )
 
     # Application (use cases)
@@ -85,6 +102,12 @@ class AppContainer(containers.DeclarativeContainer):
     get_devices_use_case = providers.Factory(
         GetDevicesUseCase,
         iot_agent_gateway=iot_agent_gateway,
+    )
+
+    training_management_use_case = providers.Factory(
+        TrainingManagementUseCase,
+        training_job_repository=training_job_repository,
+        model_repository=model_repository,
     )
 
     # Presentation

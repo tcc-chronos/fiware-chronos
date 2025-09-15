@@ -12,8 +12,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Create directory for trained models
+RUN mkdir -p /tmp/models
+
 EXPOSE 5555
 
-# Comentado pois precisa ser implementado o novo módulo celery_app na nova estrutura
-# CMD ["celery", "-A", "src.infrastructure.worker.celery_app.celery_app", "worker", "-l", "info", "-Q", "ml.train,io.sth_fetch,predict.batch"]
-CMD ["echo", "Worker service needs to be reimplemented in the new structure"]
+# Start Celery worker from Main layer
+CMD ["python", "-m", "src.main"]
