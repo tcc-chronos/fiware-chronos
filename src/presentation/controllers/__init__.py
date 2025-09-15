@@ -7,6 +7,7 @@ input validation, error handling, and mapping between API DTOs
 and application layer use cases.
 """
 
+from .devices_controller import router as devices_router
 from .models_controller import router as models_router
 
-__all__ = ["models_router"]
+__all__ = ["models_router", "devices_router"]

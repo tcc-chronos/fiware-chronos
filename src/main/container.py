@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from dependency_injector import containers, providers
 
+from src.application.use_cases.device_use_cases import GetDevicesUseCase
 from src.application.use_cases.model_use_cases import (
     CreateModelUseCase,
     DeleteModelUseCase,
@@ -19,6 +20,7 @@ from src.application.use_cases.model_use_cases import (
     UpdateModelUseCase,
 )
 from src.infrastructure.database import MongoDatabase
+from src.infrastructure.gateways.iot_agent_gateway import IoTAgentGateway
 from src.infrastructure.repositories.model_repository import ModelRepository
 
 from .config import AppSettings
@@ -48,6 +50,12 @@ class AppContainer(containers.DeclarativeContainer):
         mongo_database=mongo_database,
     )
 
+    # Gateways
+    iot_agent_gateway = providers.Singleton(
+        IoTAgentGateway,
+        iot_agent_url=config.fiware.iot_agent_url,
+    )
+
     # Application (use cases)
     get_models_use_case = providers.Factory(
         GetModelsUseCase,
@@ -72,6 +80,11 @@ class AppContainer(containers.DeclarativeContainer):
     delete_model_use_case = providers.Factory(
         DeleteModelUseCase,
         model_repository=model_repository,
+    )
+
+    get_devices_use_case = providers.Factory(
+        GetDevicesUseCase,
+        iot_agent_gateway=iot_agent_gateway,
     )
 
     # Presentation

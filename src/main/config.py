@@ -74,6 +74,9 @@ class FiwareSettings(BaseSettings):
         default="http://localhost:1026", description="Orion Context Broker URL"
     )
     sth_url: str = Field(default="http://localhost:8666", description="STH Comet URL")
+    iot_agent_url: str = Field(
+        default="http://localhost:4041", description="IoT Agent URL"
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="FIWARE_", case_sensitive=False, extra="ignore"
