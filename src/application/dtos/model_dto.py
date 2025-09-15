@@ -263,9 +263,14 @@ class ModelUpdateDTO(BaseModel):
         "json_schema_extra": {
             "example": {
                 "name": "Updated Temperature Model",
-                "layers": 3,
-                "units": 128,
+                "description": "Modelo atualizado para previsão de temperatura",
+                "rnn_units": [128, 64],
+                "dense_units": [64, 32],
                 "epochs": 150,
+                "batch_size": 64,
+                "dropout": 0.3,
+                "learning_rate": 0.0005,
+                "feature": "temperatura",
             }
         }
     }

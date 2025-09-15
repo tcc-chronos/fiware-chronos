@@ -199,6 +199,24 @@ curl -X POST "http://localhost:8000/models" \
   }'
 ```
 
+#### Atualizar um modelo existente
+
+```bash
+curl -X PATCH "http://localhost:8000/models/3fa85f64-5717-4562-b3fc-2c963f66afa6" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Modelo Atualizado de Temperatura",
+    "description": "Modelo atualizado para previsão de temperatura",
+    "rnn_units": [128, 64],
+    "dense_units": [64, 32],
+    "epochs": 150,
+    "batch_size": 64,
+    "dropout": 0.3,
+    "learning_rate": 0.0005,
+    "feature": "temperatura"
+  }'
+```
+
 ## 📊 Modelos de Dados
 
 ### ModelType (Enum)
