@@ -165,3 +165,15 @@ class MongoDatabase:
     def close(self) -> None:
         """Close the database connection."""
         self.client.close()
+
+    async def create_indexes(self) -> None:
+        """
+        Create all necessary indexes for the application.
+        This is an async method to be called during application startup.
+        """
+        # Create indexes for models collection
+        self.create_index("models", "name", unique=True)
+        self.create_index("models", "created_at")
+        self.create_index("models", "status")
+
+        # Create other indexes as needed

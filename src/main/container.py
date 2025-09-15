@@ -7,6 +7,7 @@ in the application.
 """
 
 import logging
+from contextlib import asynccontextmanager
 
 from dependency_injector import containers, providers
 
@@ -21,9 +22,6 @@ from src.infrastructure.database import MongoDatabase
 from src.infrastructure.repositories.model_repository import ModelRepository
 
 from .config import AppSettings
-
-# from contextlib import asynccontextmanager
-
 
 logger = logging.getLogger(__name__)
 
@@ -106,40 +104,54 @@ def get_container() -> AppContainer:
     return _app_container
 
 
-# @asynccontextmanager
-# async def app_lifespan():
-#     """
-#     Centralized lifecycle management for external resources.
-#     """
-#     container = get_container()
+@asynccontextmanager
+async def app_lifespan():
+    """
+    Centralized lifecycle management for external resources.
 
-#     db_config: DatabaseConfig = container.database_config()
-#     redis_client = container.redis_client()
-#     broker_client = container.broker_client()
+    This async context manager can be used in the FastAPI lifespan
+    to properly initialize and clean up resources. It follows
+    the Clean Architecture principles by managing infrastructure
+    components through the DI container.
+    """
+    container = get_container()
 
-#     try:
-#         # Startup
-#         await db_config.connect()
-#         await db_config.create_indexes()
+    # Ensure these resources exist in the container
+    mongo_database = container.mongo_database()
 
-#         if hasattr(redis_client, "connect"):
-#             await redis_client.connect()
+    # Redis and message broker - for future use
+    # redis_client = None
+    # if hasattr(container, "redis_client"):
+    #     redis_client = container.redis_client()
+    #
+    # broker_client = None
+    # if hasattr(container, "broker_client"):
+    #     broker_client = container.broker_client()
 
-#         if hasattr(broker_client, "start"):
-#             await broker_client.start()
+    try:
+        # Startup - MongoDB is already connected in __init__
+        logger.info("Ensuring MongoDB connection is established")
+        # Create necessary indexes
+        await mongo_database.create_indexes()
 
-#         logger.info("Application container initialized successfully")
-#         yield container
+        # Future Redis/Broker initialization
+        # if redis_client and hasattr(redis_client, "connect"):
+        #     await redis_client.connect()
+        # if broker_client and hasattr(broker_client, "start"):
+        #     await broker_client.start()
 
-#     finally:
-#         # Shutdown
-#         await db_config.disconnect()
+        logger.info("Application container resources initialized successfully")
+        yield container
 
-#         if hasattr(redis_client, "disconnect"):
-#             await redis_client.disconnect()
+    finally:
+        # Shutdown - Clean up resources
+        logger.info("Closing MongoDB connection")
+        mongo_database.close()
 
-#         if hasattr(broker_client, "stop"):
-#             await broker_client.stop()
+        # Future Redis/Broker cleanup
+        # if redis_client and hasattr(redis_client, "disconnect"):
+        #     await redis_client.disconnect()
+        # if broker_client and hasattr(broker_client, "stop"):
+        #     await broker_client.stop()
 
-#         container.shutdown_resources()
-#         logger.info("Application container shutdown successfully")
+        logger.info("Application container resources shutdown successfully")

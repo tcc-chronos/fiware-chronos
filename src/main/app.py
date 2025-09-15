@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.main.config import get_settings
-from src.main.container import init_container
+from src.main.container import app_lifespan, init_container
 from src.presentation.controllers import models_router
 from src.shared import configure_logging, get_logger, update_logging_from_settings
 
@@ -37,13 +37,18 @@ async def lifespan(app: FastAPI):
     Application lifespan management.
 
     This context manager is called when the application starts up,
-    and when it shuts down.
+    and when it shuts down. It uses the container's app_lifespan
+    to properly manage application resources.
     """
-    # Startup
+    # Set application startup time
     app.state.started_at = datetime.now(timezone.utc)
     logger.info("Application starting up")
-    yield
-    # Shutdown
+
+    # Use container's lifecycle management
+    async with app_lifespan() as container:
+        app.state.container = container
+        yield
+
     logger.info("Application shutting down")
 
 
