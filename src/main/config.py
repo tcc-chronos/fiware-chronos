@@ -25,7 +25,9 @@ class DatabaseSettings(BaseSettings):
         default="chronos_db", description="Name of the MongoDB database"
     )
 
-    model_config = SettingsConfigDict(env_prefix="DB_", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="DB_", case_sensitive=False, extra="ignore"
+    )
 
 
 class GESettings(BaseSettings):
@@ -46,7 +48,9 @@ class GESettings(BaseSettings):
         default=False, description="Enable auto-reload for development"
     )
 
-    model_config = SettingsConfigDict(env_prefix="GE_", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="GE_", case_sensitive=False, extra="ignore"
+    )
 
 
 class CelerySettings(BaseSettings):
@@ -58,7 +62,9 @@ class CelerySettings(BaseSettings):
     )
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL")
 
-    model_config = SettingsConfigDict(env_prefix="CELERY_", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="CELERY_", case_sensitive=False, extra="ignore"
+    )
 
 
 class FiwareSettings(BaseSettings):
@@ -69,7 +75,9 @@ class FiwareSettings(BaseSettings):
     )
     sth_url: str = Field(default="http://localhost:8666", description="STH Comet URL")
 
-    model_config = SettingsConfigDict(env_prefix="FIWARE_", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="FIWARE_", case_sensitive=False, extra="ignore"
+    )
 
 
 class LoggingSettings(BaseSettings):
@@ -84,7 +92,9 @@ class LoggingSettings(BaseSettings):
         default=None, description="Log file path (if None, logs to console)"
     )
 
-    model_config = SettingsConfigDict(env_prefix="LOG_", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_prefix="LOG_", case_sensitive=False, extra="ignore"
+    )
 
 
 class AppSettings(BaseSettings):
@@ -105,6 +115,7 @@ class AppSettings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         env_nested_delimiter="__",
+        extra="ignore",
     )
 
 

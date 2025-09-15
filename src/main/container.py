@@ -10,6 +10,16 @@ import logging
 
 from dependency_injector import containers, providers
 
+from src.application.use_cases.model_use_cases import (
+    CreateModelUseCase,
+    DeleteModelUseCase,
+    GetModelByIdUseCase,
+    GetModelsUseCase,
+    UpdateModelUseCase,
+)
+from src.infrastructure.database import MongoDatabase
+from src.infrastructure.repositories.model_repository import ModelRepository
+
 from .config import AppSettings
 
 # from contextlib import asynccontextmanager
@@ -29,8 +39,42 @@ class AppContainer(containers.DeclarativeContainer):
     config = providers.Configuration()
 
     # Infrastructure
+    mongo_database = providers.Singleton(
+        MongoDatabase,
+        mongo_uri=config.database.mongo_uri,
+        db_name=config.database.database_name,
+    )
+
+    model_repository = providers.Singleton(
+        ModelRepository,
+        mongo_database=mongo_database,
+    )
 
     # Application (use cases)
+    get_models_use_case = providers.Factory(
+        GetModelsUseCase,
+        model_repository=model_repository,
+    )
+
+    get_model_by_id_use_case = providers.Factory(
+        GetModelByIdUseCase,
+        model_repository=model_repository,
+    )
+
+    create_model_use_case = providers.Factory(
+        CreateModelUseCase,
+        model_repository=model_repository,
+    )
+
+    update_model_use_case = providers.Factory(
+        UpdateModelUseCase,
+        model_repository=model_repository,
+    )
+
+    delete_model_use_case = providers.Factory(
+        DeleteModelUseCase,
+        model_repository=model_repository,
+    )
 
     # Presentation
 
@@ -57,7 +101,8 @@ def get_container() -> AppContainer:
     """Get the initialized global container."""
 
     if _app_container is None:
-        raise RuntimeError("Container not initialized. Call init_container() first.")
+        raise RuntimeError("Container has not been initialized yet")
+
     return _app_container
 
 
