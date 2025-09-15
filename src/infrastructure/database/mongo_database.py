@@ -7,6 +7,7 @@ It handles connection, collections, and basic CRUD operations.
 
 from typing import Any, Dict, List, Optional, TypeVar
 
+import pymongo.errors
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
@@ -39,19 +40,6 @@ class MongoDatabase:
             MongoDB collection
         """
         return self.db[collection_name]
-
-    def create_index(
-        self, collection_name: str, field: str, unique: bool = False
-    ) -> None:
-        """
-        Create an index on a collection.
-
-        Args:
-            collection_name: Name of the collection
-            field: Field to index
-            unique: Whether the index should be unique
-        """
-        self.db[collection_name].create_index(field, unique=unique)
 
     async def find_one(
         self, collection_name: str, query: Dict[str, Any]
@@ -166,20 +154,55 @@ class MongoDatabase:
         """Close the database connection."""
         self.client.close()
 
+    def _safe_drop_index(self, collection_name: str, index_name: str) -> None:
+        """
+        Safely drop an index if it exists.
+
+        Args:
+            collection_name: Name of the collection
+            index_name: Name of the index to drop
+        """
+        try:
+            self.db[collection_name].drop_index(index_name)
+        except pymongo.errors.OperationFailure:
+            # Index doesn't exist, nothing to do
+            pass
+
     async def create_indexes(self) -> None:
         """
         Create all necessary indexes for the application.
         This is an async method to be called during application startup.
         """
-        # Create indexes for models collection
-        self.create_index("models", "name", unique=True)
-        self.create_index("models", "created_at")
-        self.create_index("models", "status")
-        self.create_index("models", "model_type")
-        self.create_index("models", "entity_id")
-        self.create_index("models", "feature")
+        collection_name = "models"
 
-        # Create compound indexes for common query combinations
-        self.db["models"].create_index([("model_type", 1), ("status", 1)])
+        # First drop any potentially conflicting indexes
+        self._safe_drop_index(collection_name, "created_at_idx")
+        self._safe_drop_index(collection_name, "status_idx")
+        self._safe_drop_index(collection_name, "model_type_idx")
+        self._safe_drop_index(collection_name, "entity_id_idx")
+        self._safe_drop_index(collection_name, "feature_idx")
+        self._safe_drop_index(collection_name, "model_type_status_idx")
+        self._safe_drop_index(collection_name, "entity_feature_idx")
 
-        self.db["models"].create_index([("entity_id", 1), ("feature", 1)])
+        try:
+            # Create indexes for models collection
+            self.db[collection_name].create_index("created_at", name="created_at_idx")
+            self.db[collection_name].create_index("status", name="status_idx")
+            self.db[collection_name].create_index("model_type", name="model_type_idx")
+            self.db[collection_name].create_index("entity_id", name="entity_id_idx")
+            self.db[collection_name].create_index("feature", name="feature_idx")
+
+            # Create compound indexes for common query combinations
+            self.db[collection_name].create_index(
+                [("model_type", 1), ("status", 1)],
+                name="model_type_status_idx",
+                background=True,
+            )
+
+            self.db[collection_name].create_index(
+                [("entity_id", 1), ("feature", 1)],
+                name="entity_feature_idx",
+                background=True,
+            )
+        except pymongo.errors.OperationFailure as e:
+            print(f"Warning: Failed to create indexes: {str(e)}")

@@ -30,22 +30,9 @@ class ModelRepository(IModelRepository):
         """
         self.db = mongo_database
 
-        # Create indexes
-        self._create_indexes()
-
     def _create_indexes(self) -> None:
         """Create necessary indexes on the collection."""
-        # Index on ID for faster lookups
-        self.db.create_index(self.COLLECTION_NAME, "id", unique=True)
-
-        # Index on creation date for sorting
-        self.db.create_index(self.COLLECTION_NAME, "created_at")
-
-        # Index on model type for filtering
-        self.db.create_index(self.COLLECTION_NAME, "model_type")
-
-        # Index on status for filtering
-        self.db.create_index(self.COLLECTION_NAME, "status")
+        pass
 
     def _to_document(self, model: Model) -> Dict[str, Any]:
         """Convert a Model entity to a MongoDB document."""
