@@ -95,8 +95,8 @@ class ModelRepository(IModelRepository):
             description=document.get("description"),
             model_type=ModelType(document["model_type"]),
             status=ModelStatus(document["status"]),
-            rnn_dropout=document["rnn_dropout"],
-            dense_dropout=document["dense_dropout"],
+            rnn_dropout=document.get("rnn_dropout", 0.0),
+            dense_dropout=document.get("dense_dropout", 0.2),
             batch_size=document["batch_size"],
             epochs=document["epochs"],
             learning_rate=document["learning_rate"],
@@ -144,20 +144,47 @@ class ModelRepository(IModelRepository):
             return None
         return self._to_entity(document)
 
-    async def find_all(self, skip: int = 0, limit: int = 100) -> List[Model]:
+    async def find_all(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        model_type: Optional[str] = None,
+        status: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        feature: Optional[str] = None,
+    ) -> List[Model]:
         """
-        Find all models with pagination.
+        Find all models with pagination and filtering options.
 
         Args:
             skip: Number of records to skip (for pagination)
             limit: Maximum number of records to return
+            model_type: Filter by model type (e.g., 'lstm', 'gru')
+            status: Filter by model status (e.g., 'draft', 'trained')
+            entity_id: Filter by FIWARE entity ID
+            feature: Filter by feature name
 
         Returns:
-            List of models
+            List of models matching the criteria
         """
+        # Build query with optional filters
+        query = {}
+
+        if model_type is not None:
+            query["model_type"] = model_type
+
+        if status is not None:
+            query["status"] = status
+
+        if entity_id is not None:
+            query["entity_id"] = entity_id
+
+        if feature is not None:
+            query["feature"] = feature
+
         documents = await self.db.find_many(
             self.COLLECTION_NAME,
-            {},
+            query,
             sort_by="created_at",
             sort_direction=pymongo.DESCENDING,
             skip=skip,

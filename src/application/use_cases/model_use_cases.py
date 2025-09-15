@@ -6,7 +6,7 @@ It orchestrates the flow of data to and from the entities
 and implements the business rules of the application.
 """
 
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
@@ -33,18 +33,37 @@ class GetModelsUseCase:
     ):
         self.model_repository = model_repository
 
-    async def execute(self, skip: int = 0, limit: int = 100) -> List[ModelResponseDTO]:
+    async def execute(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        model_type: Optional[str] = None,
+        status: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        feature: Optional[str] = None,
+    ) -> List[ModelResponseDTO]:
         """
-        Retrieve a list of models with pagination.
+        Retrieve a list of models with pagination and filtering.
 
         Args:
             skip: Number of records to skip
             limit: Maximum number of records to return
+            model_type: Filter by model type (e.g., 'lstm', 'gru')
+            status: Filter by model status (e.g., 'draft', 'trained')
+            entity_id: Filter by FIWARE entity ID
+            feature: Filter by feature name
 
         Returns:
-            List of model response DTOs
+            List of model response DTOs matching the criteria
         """
-        models = await self.model_repository.find_all(skip=skip, limit=limit)
+        models = await self.model_repository.find_all(
+            skip=skip,
+            limit=limit,
+            model_type=model_type,
+            status=status,
+            entity_id=entity_id,
+            feature=feature,
+        )
         return [self._to_response_dto(model) for model in models]
 
     def _to_response_dto(self, model: Model) -> ModelResponseDTO:

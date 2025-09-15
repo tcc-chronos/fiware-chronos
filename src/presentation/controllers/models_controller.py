@@ -4,7 +4,7 @@ Models Router - Presentation Layer
 This module defines the FastAPI router for model endpoints.
 """
 
-from typing import List
+from typing import List, Optional
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -35,13 +35,32 @@ async def get_models(
     limit: int = Query(
         100, ge=1, le=1000, description="Maximum number of models to return"
     ),
+    model_type: Optional[str] = Query(
+        None, description="Filter by model type (e.g., 'lstm', 'gru')"
+    ),
+    model_status: Optional[str] = Query(
+        None, description="Filter by model status (e.g., 'draft', 'trained')"
+    ),
+    entity_id: Optional[str] = Query(None, description="Filter by FIWARE entity ID"),
+    feature: Optional[str] = Query(None, description="Filter by feature name"),
     get_models_use_case: GetModelsUseCase = Depends(Provide["get_models_use_case"]),
 ) -> List[ModelResponseDTO]:
     """
-    Get a list of all models with pagination.
+    Get a list of models with pagination and filtering options.
+
+    Filter models by various criteria such as model type, status,
+    entity ID, and feature. All filters are optional and can be
+    combined for more specific queries.
     """
     try:
-        return await get_models_use_case.execute(skip=skip, limit=limit)
+        return await get_models_use_case.execute(
+            skip=skip,
+            limit=limit,
+            model_type=model_type,
+            status=model_status,
+            entity_id=entity_id,
+            feature=feature,
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

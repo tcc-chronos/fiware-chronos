@@ -175,5 +175,11 @@ class MongoDatabase:
         self.create_index("models", "name", unique=True)
         self.create_index("models", "created_at")
         self.create_index("models", "status")
+        self.create_index("models", "model_type")
+        self.create_index("models", "entity_id")
+        self.create_index("models", "feature")
 
-        # Create other indexes as needed
+        # Create compound indexes for common query combinations
+        self.db["models"].create_index([("model_type", 1), ("status", 1)])
+
+        self.db["models"].create_index([("entity_id", 1), ("feature", 1)])

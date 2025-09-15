@@ -30,16 +30,28 @@ class IModelRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_all(self, skip: int = 0, limit: int = 100) -> List[Model]:
+    async def find_all(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        model_type: Optional[str] = None,
+        status: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        feature: Optional[str] = None,
+    ) -> List[Model]:
         """
-        Find all models with pagination.
+        Find all models with pagination and filtering options.
 
         Args:
             skip: Number of records to skip (for pagination)
             limit: Maximum number of records to return
+            model_type: Filter by model type (e.g., 'lstm', 'gru')
+            status: Filter by model status (e.g., 'draft', 'trained')
+            entity_id: Filter by FIWARE entity ID
+            feature: Filter by feature name
 
         Returns:
-            List of models
+            List of models matching the criteria
         """
         pass
 

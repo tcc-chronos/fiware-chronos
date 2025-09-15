@@ -172,8 +172,24 @@ Para executar o projeto com todas as suas dependências, utilize o Docker Compos
 - **GET `/models`**:
   - `skip` (int, opcional): Número de registros a pular (padrão: 0)
   - `limit` (int, opcional): Número máximo de registros a retornar (padrão: 100)
+  - `model_type` (string, opcional): Filtrar por tipo de modelo (ex: 'lstm', 'gru')
+  - `model_status` (string, opcional): Filtrar por status do modelo (ex: 'draft', 'trained')
+  - `entity_id` (string, opcional): Filtrar por ID da entidade FIWARE
+  - `feature` (string, opcional): Filtrar por nome do atributo/característica
 
 ### Exemplos de Uso
+
+#### Listar modelos com filtros
+
+```bash
+# Listar todos os modelos do tipo 'lstm' que estão treinados
+curl -X GET "http://localhost:8000/models?model_type=lstm&model_status=trained" \
+  -H "accept: application/json"
+
+# Buscar modelos para uma entidade específica e um atributo específico
+curl -X GET "http://localhost:8000/models?entity_id=urn:ngsi-ld:Device:001&feature=temperature" \
+  -H "accept: application/json"
+```
 
 #### Criar um novo modelo
 
