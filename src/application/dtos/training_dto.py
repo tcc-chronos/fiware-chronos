@@ -6,7 +6,7 @@ DTOs are used to transfer data between layers and define the API contracts.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -85,7 +85,7 @@ class TrainingJobDTO(BaseModel):
 
     # Error handling
     error: Optional[str] = None
-    error_details: Optional[Dict[str, str]] = None
+    error_details: Optional[Dict[str, Any]] = None
 
     # Audit
     created_at: datetime

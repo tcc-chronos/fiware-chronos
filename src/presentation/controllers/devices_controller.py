@@ -4,15 +4,14 @@ Devices Router - Presentation Layer
 This module defines the FastAPI router for device endpoints.
 """
 
-import logging
-
+import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.application.dtos.device_dto import DevicesResponseDTO
 from src.application.use_cases.device_use_cases import GetDevicesUseCase
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 

@@ -118,10 +118,29 @@ class TrainingManagementUseCase:
             # Start Celery orchestration task
             from src.infrastructure.services.celery_config import celery_app
 
-            celery_app.tasks["orchestrate_training"].delay(
+            logger.info(
+                "Dispatching orchestration task",
                 training_job_id=str(created_job.id),
                 model_id=str(model_id),
-                last_n=request.last_n,
+                task_name="orchestrate_training",
+                queue="orchestration",
+            )
+
+            result = celery_app.send_task(
+                "orchestrate_training",
+                kwargs={
+                    "training_job_id": str(created_job.id),
+                    "model_id": str(model_id),
+                    "last_n": request.last_n,
+                },
+                queue="orchestration",
+            )
+
+            logger.info(
+                "Orchestration task dispatched",
+                training_job_id=str(created_job.id),
+                task_id=result.id,
+                status="sent",
             )
 
             logger.info(

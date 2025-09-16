@@ -557,7 +557,7 @@ def orchestrate_training(
         # Create parallel data collection tasks
         data_collection_tasks = group(
             [
-                celery_app.tasks["collect_data_chunk"].s(
+                collect_data_chunk.s(
                     job_id=str(job.id),
                     training_job_id=training_job_id,
                     entity_type=model.entity_type,
@@ -565,7 +565,7 @@ def orchestrate_training(
                     attribute=model.feature,
                     last_n=job.last_n,
                     h_offset=job.h_offset,
-                )
+                ).set(queue="data_collection")
                 for job in collection_jobs
             ]
         )
@@ -577,141 +577,46 @@ def orchestrate_training(
             max_per_task=max_per_request,
         )
 
-        collection_result = data_collection_tasks.apply_async()
-        collection_results = collection_result.get()  # Wait for all tasks to complete
+        # Use chord to schedule after all data_collection_tasks finish
+        from celery import chord
 
-        # Process and validate results
-        successful_chunks = []
-        failed_chunks = []
-        all_data_points = []
-
-        for result in collection_results:
-            if result["status"] == "completed":
-                successful_chunks.append(result)
-                chunk_data = result["data_points"]
-                all_data_points.extend(chunk_data)
-                logger.info(
-                    "Chunk completed successfully",
-                    job_id=result["job_id"],
-                    data_points=result["data_points_collected"],
-                    h_offset=result["h_offset"],
-                )
-            else:
-                failed_chunks.append(result)
-                logger.error(
-                    "Chunk failed",
-                    job_id=result.get("job_id"),
-                    error=result.get("error"),
-                )
-
-        # Sort data points by timestamp to ensure proper chronological order
-        # This is crucial for time series model training
-        if all_data_points:
-            logger.info("Reordering collected data by timestamp")
-            all_data_points.sort(key=lambda x: x["timestamp"])
-
-            # Log comprehensive summary
-            date_range = (
-                f"{all_data_points[0]['timestamp']} to "
-                f"{all_data_points[-1]['timestamp']}"
-            )
-            _log_data_collection_summary(
-                total_requested=last_n,
-                total_collected=len(all_data_points),
-                chunks=len(successful_chunks),
-                date_range=date_range,
-            )
-        else:
-            logger.warning(
-                "No data points collected",
+        chord_result = chord(
+            data_collection_tasks,
+            process_collected_data.s(
                 training_job_id=training_job_id,
-                failed_chunks=len(failed_chunks),
-            )
-
-        # Check if we have enough data to proceed
-        if len(failed_chunks) > 0:
-            logger.warning(
-                f"Some data collection chunks failed "
-                f"({len(failed_chunks)}/{len(collection_jobs)})"
-            )
-
-        if len(all_data_points) < window_size:
-            raise ValueError(
-                f"Insufficient data collected: got {len(all_data_points)}, "
-                f"need at least {window_size} for window size"
-            )
-
-        # Evitar atualização se job foi cancelado
-        training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
-        if training_job and training_job.status == TrainingStatus.CANCELLED:
-            logger.info(
-                "Job was cancelled, skipping final update and training",
-                training_job_id=training_job_id,
-            )
-            return {
-                "training_job_id": training_job_id,
-                "status": "cancelled",
-                "message": "Job was cancelled before training.",
-            }
-        else:
-            asyncio.run(
-                training_job_repo.update_training_job_status(
-                    UUID(training_job_id),
-                    TrainingStatus.PREPROCESSING,
-                    data_collection_end=datetime.now(timezone.utc),
-                    preprocessing_start=datetime.now(timezone.utc),
-                    total_data_points_collected=len(all_data_points),
-                )
-            )
-
-        # Convert model to dictionary for serialization
-        model_dict = {
-            "id": str(model.id),
-            "name": model.name,
-            "model_type": model.model_type.value,
-            "rnn_units": model.rnn_units,
-            "dense_units": model.dense_units,
-            "rnn_dropout": model.rnn_dropout,
-            "dense_dropout": model.dense_dropout,
-            "learning_rate": model.learning_rate,
-            "batch_size": model.batch_size,
-            "epochs": model.epochs,
-            "early_stopping_patience": model.early_stopping_patience,
-            "feature": model.feature,
-            "entity_type": model.entity_type,
-            "entity_id": model.entity_id,
-        }
-
-        # Start model training task
-        logger.info("Starting model training with collected data")
-        training_task = celery_app.tasks["train_model_task"].delay(
-            training_job_id=training_job_id,
-            model_config=model_dict,
-            collected_data=all_data_points,
-            window_size=window_size,
-        )
-
-        training_result = training_task.get()  # Wait for training to complete
+                model_config={
+                    "id": str(model.id),
+                    "name": model.name,
+                    "model_type": model.model_type.value,
+                    "rnn_units": model.rnn_units,
+                    "dense_units": model.dense_units,
+                    "rnn_dropout": model.rnn_dropout,
+                    "dense_dropout": model.dense_dropout,
+                    "learning_rate": model.learning_rate,
+                    "batch_size": model.batch_size,
+                    "epochs": model.epochs,
+                    "early_stopping_patience": model.early_stopping_patience,
+                    "feature": model.feature,
+                    "entity_type": model.entity_type,
+                    "entity_id": model.entity_id,
+                },
+                window_size=window_size,
+                last_n=last_n,
+            ),
+        ).apply_async(queue="orchestration")
 
         logger.info(
-            "Training orchestration completed successfully",
+            "Training orchestration initiated",
             training_job_id=training_job_id,
-            final_status=training_result["status"],
-            total_data_points_used=len(all_data_points),
+            collection_tasks=len(collection_jobs),
+            chord_id=chord_result.id,
         )
 
         return {
             "training_job_id": training_job_id,
-            "status": "completed",
-            "data_collection_summary": {
-                "requested_points": last_n,
-                "collected_points": len(all_data_points),
-                "collection_jobs": len(collection_jobs),
-                "successful_chunks": len(successful_chunks),
-                "failed_chunks": len(failed_chunks),
-                "data_sorted": True,
-            },
-            "training_result": training_result,
+            "status": "data_collection_started",
+            "collection_tasks": len(collection_jobs),
+            "chord_id": chord_result.id,
         }
 
     except Exception as exc:
@@ -759,3 +664,171 @@ def orchestrate_training(
             last_n=last_n,
         )
         raise exc
+
+
+@celery_app.task(bind=True, base=CallbackTask, name="process_collected_data")
+def process_collected_data(
+    self,
+    collection_results: List[Dict[str, Any]],
+    training_job_id: str,
+    model_config: Dict[str, Any],
+    window_size: int,
+    last_n: int,
+) -> Dict[str, Any]:
+    """
+    Process collected data and start model training.
+
+    This task processes the results from parallel data collection chunks,
+    reorders data chronologically, and initiates model training.
+    """
+    training_job_repo = None
+    try:
+        from src.infrastructure.database.mongo_database import MongoDatabase
+        from src.infrastructure.repositories.training_job_repository import (
+            TrainingJobRepository,
+        )
+        from src.main.config import get_settings
+
+        settings = get_settings()
+        database = MongoDatabase(
+            mongo_uri=settings.database.mongo_uri,
+            db_name=settings.database.database_name,
+        )
+        training_job_repo = TrainingJobRepository(database)
+
+        logger.info(
+            "Processing collected data results",
+            training_job_id=training_job_id,
+            total_chunks=len(collection_results),
+        )
+
+        # Process and validate results
+        successful_chunks = []
+        failed_chunks = []
+        all_data_points = []
+
+        for result in collection_results:
+            if isinstance(result, dict) and result.get("status") == "completed":
+                successful_chunks.append(result)
+                all_data_points.extend(result["data_points"])
+            else:
+                failed_chunks.append(result)
+                logger.warning(
+                    "Data collection chunk failed",
+                    job_id=(
+                        result.get("job_id") if isinstance(result, dict) else "unknown"
+                    ),
+                    error=(
+                        result.get("error") if isinstance(result, dict) else str(result)
+                    ),
+                )
+
+        # Sort data points by timestamp
+        if all_data_points:
+            all_data_points.sort(key=lambda x: datetime.fromisoformat(x["timestamp"]))
+            _log_data_collection_summary(
+                total_requested=last_n,
+                total_collected=len(all_data_points),
+                chunks=len(successful_chunks),
+                date_range=(
+                    f"{all_data_points[0]['timestamp']} to "
+                    f"{all_data_points[-1]['timestamp']}"
+                ),
+            )
+        else:
+            logger.warning(
+                "No data collected from any chunk", training_job_id=training_job_id
+            )
+
+        # Validate data sufficiency
+        if len(all_data_points) < window_size:
+            raise ValueError(
+                "Insufficient data for training: collected "
+                f"{len(all_data_points)}, need at least {window_size}"
+            )
+
+        # Check if job was cancelled
+        training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if training_job and training_job.status == TrainingStatus.CANCELLED:
+            logger.info(
+                "Job was cancelled, skipping training",
+                training_job_id=training_job_id,
+            )
+            return {
+                "training_job_id": training_job_id,
+                "status": "cancelled",
+                "message": "Job was cancelled before training.",
+            }
+
+        # Update job status to preprocessing
+        asyncio.run(
+            training_job_repo.update_training_job_status(
+                UUID(training_job_id),
+                TrainingStatus.PREPROCESSING,
+                data_collection_end=datetime.now(timezone.utc),
+                preprocessing_start=datetime.now(timezone.utc),
+                total_data_points_collected=len(all_data_points),
+            )
+        )
+
+        # Start model training task
+        logger.info("Starting model training with collected data")
+        training_task = (
+            train_model_task.s(
+                training_job_id=training_job_id,
+                model_config=model_config,
+                collected_data=all_data_points,
+                window_size=window_size,
+            )
+            .set(queue="model_training")
+            .apply_async()
+        )
+
+        logger.info(
+            "Data processing completed, training started",
+            training_job_id=training_job_id,
+            total_data_points=len(all_data_points),
+            training_task_id=training_task.id,
+        )
+
+        return {
+            "training_job_id": training_job_id,
+            "status": "training_started",
+            "total_data_points_collected": len(all_data_points),
+            "successful_chunks": len(successful_chunks),
+            "failed_chunks": len(failed_chunks),
+            "training_task_id": training_task.id,
+        }
+
+    except Exception as exc:
+        logger.error(
+            "Data processing failed",
+            training_job_id=training_job_id,
+            error=str(exc),
+        )
+
+        try:
+            if training_job_repo is not None:
+                asyncio.run(
+                    training_job_repo.fail_training_job(
+                        UUID(training_job_id),
+                        error=str(exc),
+                        error_details={
+                            "processing_error": True,
+                            "task_id": self.request.id,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.error(f"Failed to update training job status: {e}")
+
+        raise exc
+
+
+# Ensure tasks are registered with the Celery app
+__all__ = [
+    "collect_data_chunk",
+    "train_model_task",
+    "orchestrate_training",
+    "process_collected_data",
+]

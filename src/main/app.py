@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Import Celery tasks to ensure they are registered
+from src.infrastructure.services import celery_tasks  # noqa: F401
 from src.main.config import get_settings
 from src.main.container import app_lifespan, init_container
 from src.presentation.controllers import devices_router, models_router
