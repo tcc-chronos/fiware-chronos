@@ -154,16 +154,38 @@ def collect_data_chunk(
             for point in collected_data
         ]
 
-        # Update job status to completed
-        asyncio.run(
-            training_job_repo.update_data_collection_job_status(
-                UUID(training_job_id),
-                UUID(job_id),
-                DataCollectionStatus.COMPLETED,
-                end_time=datetime.now(timezone.utc),
-                data_points_collected=len(collected_data),
+        # Evitar atualização se job foi cancelado
+        job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if job and job.status == TrainingStatus.CANCELLED:
+            logger.info(
+                "Job was cancelled, skipping final update",
+                training_job_id=training_job_id,
+                job_id=job_id,
             )
-        )
+            return {
+                "job_id": job_id,
+                "training_job_id": training_job_id,
+                "status": "cancelled",
+                "data_points_collected": 0,
+                "data_points": [],
+                "h_offset": h_offset,
+                "chunk_info": {
+                    "requested_last_n": last_n,
+                    "actual_collected": 0,
+                    "offset": h_offset,
+                },
+                "message": "Job was cancelled.",
+            }
+        else:
+            asyncio.run(
+                training_job_repo.update_data_collection_job_status(
+                    UUID(training_job_id),
+                    UUID(job_id),
+                    DataCollectionStatus.COMPLETED,
+                    end_time=datetime.now(timezone.utc),
+                    data_points_collected=len(collected_data),
+                )
+            )
 
         logger.info(
             "Data collection chunk completed successfully",
@@ -344,17 +366,29 @@ def train_model_task(
             )
         )
 
-        # Update training job with results
-        asyncio.run(
-            training_job_repo.complete_training_job(
-                UUID(training_job_id),
-                metrics=metrics,
-                model_artifact_path=model_path,
-                x_scaler_path=x_scaler_path,
-                y_scaler_path=y_scaler_path,
-                metadata_path=metadata_path,
+        # Evitar atualização se job foi cancelado
+        job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if job and job.status == TrainingStatus.CANCELLED:
+            logger.info(
+                "Job was cancelled, skipping final update",
+                training_job_id=training_job_id,
             )
-        )
+            return {
+                "training_job_id": training_job_id,
+                "status": "cancelled",
+                "message": "Job was cancelled.",
+            }
+        else:
+            asyncio.run(
+                training_job_repo.complete_training_job(
+                    UUID(training_job_id),
+                    metrics=metrics,
+                    model_artifact_path=model_path,
+                    x_scaler_path=x_scaler_path,
+                    y_scaler_path=y_scaler_path,
+                    metadata_path=metadata_path,
+                )
+            )
 
         logger.info(
             "Model training completed successfully",
@@ -607,16 +641,28 @@ def orchestrate_training(
                 f"need at least {window_size} for window size"
             )
 
-        # Update training job status
-        asyncio.run(
-            training_job_repo.update_training_job_status(
-                UUID(training_job_id),
-                TrainingStatus.PREPROCESSING,
-                data_collection_end=datetime.now(timezone.utc),
-                preprocessing_start=datetime.now(timezone.utc),
-                total_data_points_collected=len(all_data_points),
+        # Evitar atualização se job foi cancelado
+        training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if training_job and training_job.status == TrainingStatus.CANCELLED:
+            logger.info(
+                "Job was cancelled, skipping final update and training",
+                training_job_id=training_job_id,
             )
-        )
+            return {
+                "training_job_id": training_job_id,
+                "status": "cancelled",
+                "message": "Job was cancelled before training.",
+            }
+        else:
+            asyncio.run(
+                training_job_repo.update_training_job_status(
+                    UUID(training_job_id),
+                    TrainingStatus.PREPROCESSING,
+                    data_collection_end=datetime.now(timezone.utc),
+                    preprocessing_start=datetime.now(timezone.utc),
+                    total_data_points_collected=len(all_data_points),
+                )
+            )
 
         # Convert model to dictionary for serialization
         model_dict = {
