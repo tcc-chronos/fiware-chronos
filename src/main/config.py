@@ -82,6 +82,11 @@ class FiwareSettings(BaseSettings):
     iot_agent_url: str = Field(
         default="http://localhost:4041", description="IoT Agent URL"
     )
+    max_per_request: int = Field(
+        default=100,
+        description="Maximum records per STH-Comet request",
+        alias="STH_MAX_PER_REQUEST",
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="FIWARE_", case_sensitive=False, extra="ignore"
