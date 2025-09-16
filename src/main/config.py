@@ -57,10 +57,15 @@ class CelerySettings(BaseSettings):
     """Celery configuration settings."""
 
     broker_url: str = Field(
-        default="amqp://chronos:chronos@localhost:5672/chronos",
+        default="amqp://chronos:chronos@rabbitmq:5672/chronos",
         description="Message broker URL",
+        alias="CELERY_BROKER_URL",
     )
-    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL")
+    result_backend_url: str = Field(
+        default="redis://redis:6379/0",
+        description="Result backend URL",
+        alias="CELERY_RESULT_BACKEND",
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="CELERY_", case_sensitive=False, extra="ignore"

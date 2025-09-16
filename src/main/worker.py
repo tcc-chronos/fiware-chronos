@@ -16,7 +16,6 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Now import project modules
-from src.infrastructure.services.celery_config import celery_app  # noqa: E402
 from src.main.config import get_settings  # noqa: E402
 from src.shared import (  # noqa: E402
     configure_logging,
@@ -48,16 +47,24 @@ def create_worker():
 
     # Configure environment variables if not already set
     os.environ.setdefault("CELERY_BROKER_URL", settings.celery.broker_url)
-    os.environ.setdefault("CELERY_RESULT_BACKEND", settings.celery.redis_url)
+    os.environ.setdefault("CELERY_RESULT_BACKEND", settings.celery.result_backend_url)
+
+    # Create Celery app with centralized configuration
+    from src.infrastructure.services.celery_config import create_celery_app
+
+    worker_app = create_celery_app(
+        broker_url=settings.celery.broker_url,
+        backend_url=settings.celery.result_backend_url,
+    )
 
     logger.info(
         "Configuring Celery worker",
-        broker_url=os.getenv("CELERY_BROKER_URL"),
-        backend_url=os.getenv("CELERY_RESULT_BACKEND"),
-        app_name=celery_app.main,
+        broker_url=settings.celery.broker_url,
+        backend_url=settings.celery.result_backend_url,
+        app_name=worker_app.main,
     )
 
-    return celery_app
+    return worker_app
 
 
 def main():
