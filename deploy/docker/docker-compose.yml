@@ -22,19 +22,6 @@ services:
     ports: ["6379:6379"]
     command: ["redis-server", "--appendonly", "yes"]
 
-  # FIWARE STH-Comet (Mock/Demo service)
-  sth-comet:
-    image: fiware/sth-comet:2.10.0
-    restart: unless-stopped
-    ports:
-      - "8666:8666"
-    environment:
-      STH_HOST: "0.0.0.0"
-      STH_PORT: "8666"
-      DB_URI: "mongodb://mongo:27017/sth_chronos"
-      LOGOPS_LEVEL: "INFO"
-    depends_on: [mongo]
-
   worker:
     build:
       context: ../..
@@ -43,13 +30,21 @@ services:
     env_file:
       - ../../.env
     environment:
+      # Database
       DB_MONGO_URI: ${DB_MONGO_URI:-mongodb://mongo:27017/chronos}
       DB_DATABASE_NAME: ${DB_DATABASE_NAME:-chronos}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      # Celery
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://chronos:chronos@rabbitmq:5672/chronos}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
-      FIWARE_STH_URL: ${FIWARE_STH_URL:-http://sth-comet:8666}
+      # FIWARE Services (External)
+      FIWARE_ORION_URL: ${FIWARE_ORION_URL}
+      FIWARE_STH_URL: ${FIWARE_STH_URL}
+      FIWARE_IOT_AGENT_URL: ${FIWARE_IOT_AGENT_URL}
+      FIWARE_STH_MAX_PER_REQUEST: ${FIWARE_STH_MAX_PER_REQUEST:-100}
+      # Application
       ENVIRONMENT: ${ENVIRONMENT:-development}
-    depends_on: [mongo, rabbitmq, redis, sth-comet]
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on: [mongo, rabbitmq, redis]
     volumes:
       - trained_models:/tmp/models
 
@@ -84,20 +79,28 @@ services:
     env_file:
       - ../../.env
     environment:
+      # Database
       DB_MONGO_URI: ${DB_MONGO_URI:-mongodb://mongo:27017/chronos}
       DB_DATABASE_NAME: ${DB_DATABASE_NAME:-chronos}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      # Celery
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://chronos:chronos@rabbitmq:5672/chronos}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
-      FIWARE_STH_URL: ${FIWARE_STH_URL:-http://sth-comet:8666}
+      # FIWARE Services (External)
+      FIWARE_ORION_URL: ${FIWARE_ORION_URL}
+      FIWARE_STH_URL: ${FIWARE_STH_URL}
+      FIWARE_IOT_AGENT_URL: ${FIWARE_IOT_AGENT_URL}
+      FIWARE_STH_MAX_PER_REQUEST: ${FIWARE_STH_MAX_PER_REQUEST:-100}
+      # Application
       GE_TITLE: ${GE_TITLE:-chronos-ge}
       GE_VERSION: ${GE_VERSION:-0.1.0}
       GE_PORT: ${GE_PORT:-8000}
       GIT_COMMIT: ${GIT_COMMIT:-unknown}
       BUILD_TIME: ${BUILD_TIME:-unknown}
       ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${GE_PORT:-8000}:${GE_PORT:-8000}"
-    depends_on: [ mongo, rabbitmq, redis, sth-comet ]
+    depends_on: [mongo, rabbitmq, redis]
     volumes:
       - trained_models:/tmp/models
 
