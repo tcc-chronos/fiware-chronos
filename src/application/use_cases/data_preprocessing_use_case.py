@@ -121,10 +121,13 @@ class DataPreprocessingUseCase:
 
         # Validate data size
         n = len(df)
-        if n <= window_size + 2:
+        min_required = window_size + 10  # Need extra points for meaningful splits
+        if n <= min_required:
             raise ValueError(
                 f"Insufficient data: {n} points available, but need at least "
-                f"{window_size + 3} for window_size={window_size} and splits"
+                f"{min_required} for window_size={window_size} "
+                f"with train/val/test splits. "
+                f"Consider collecting more data or reducing window_size."
             )
 
         # Temporal split (maintaining order)
@@ -244,8 +247,15 @@ class DataPreprocessingUseCase:
         duplicates = df.duplicated(subset=["timestamp"]).sum()
         if duplicates > 0:
             logger.warning("Found duplicate timestamps", duplicate_count=duplicates)
-            # Keep last occurrence of each timestamp
-            df = df.drop_duplicates(subset=["timestamp"], keep="last")
+            # Aggregate duplicate timestamps by taking the mean value
+            # This preserves more data than just dropping duplicates
+            df = df.groupby("timestamp", as_index=False).agg({"value": "mean"})
+            logger.info(
+                "Aggregated duplicate timestamps",
+                original_count=len(data_dicts),
+                final_count=len(df),
+                duplicates_resolved=duplicates,
+            )
 
         if len(df) == 0:
             raise ValueError("No valid data points after cleaning")

@@ -20,20 +20,20 @@ class ISTHCometGateway(ABC):
         entity_type: str,
         entity_id: str,
         attribute: str,
-        last_n: int,
-        h_offset: int = 0,
+        h_limit: int,
+        h_offset: int,
         fiware_service: str = "smart",
         fiware_servicepath: str = "/",
     ) -> List[CollectedDataDTO]:
         """
-        Collect historical data from STH-Comet.
+        Collect historical data from STH-Comet using hLimit and hOffset.
 
         Args:
             entity_type: Type of the entity (e.g., "Sensor")
             entity_id: ID of the entity (e.g., "urn:ngsi-ld:Chronos:ESP32:001")
             attribute: Attribute to collect (e.g., "humidity")
-            last_n: Number of most recent values to collect (max 100 per request)
-            h_offset: Historical offset for pagination
+            h_limit: Number of values to collect (max 100 per request)
+            h_offset: Historical offset for pagination (starts from total count)
             fiware_service: FIWARE service header
             fiware_servicepath: FIWARE service path header
 
@@ -46,7 +46,7 @@ class ISTHCometGateway(ABC):
         pass
 
     @abstractmethod
-    async def get_total_count(
+    async def get_total_count_from_header(
         self,
         entity_type: str,
         entity_id: str,
@@ -55,7 +55,7 @@ class ISTHCometGateway(ABC):
         fiware_servicepath: str = "/",
     ) -> int:
         """
-        Get total count of available data points.
+        Get total count of available data points from fiware-total-count header.
 
         Args:
             entity_type: Type of the entity
@@ -65,7 +65,7 @@ class ISTHCometGateway(ABC):
             fiware_servicepath: FIWARE service path header
 
         Returns:
-            Total count of available data points
+            Total number of available data points
 
         Raises:
             STHCometError: When count retrieval fails

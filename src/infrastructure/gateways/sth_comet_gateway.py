@@ -44,21 +44,24 @@ class STHCometGateway(ISTHCometGateway):
         entity_type: str,
         entity_id: str,
         attribute: str,
-        last_n: int,
-        h_offset: int = 0,
+        h_limit: int,
+        h_offset: int,
         fiware_service: str = "smart",
         fiware_servicepath: str = "/",
     ) -> List[CollectedDataDTO]:
-        """Collect historical data from STH-Comet."""
+        """Collect historical data from STH-Comet using hLimit and hOffset."""
 
         # Validate parameters
-        if last_n > 100:
+        if h_limit > 100:
             raise STHCometError(
-                "last_n cannot be greater than 100 per STH-Comet limitations"
+                "h_limit cannot be greater than 100 per STH-Comet limitations"
             )
 
-        if last_n <= 0:
-            raise STHCometError("last_n must be positive")
+        if h_limit <= 0:
+            raise STHCometError("h_limit must be positive")
+
+        if h_offset < 0:
+            raise STHCometError("h_offset must be non-negative")
 
         # URL encode entity_id to handle special characters
         encoded_entity_id = quote(entity_id, safe="")
@@ -69,8 +72,8 @@ class STHCometGateway(ISTHCometGateway):
             f"id/{encoded_entity_id}/attributes/{attribute}"
         )
 
-        # Build query parameters
-        params = {"lastN": str(last_n), "hOffset": str(h_offset), "count": "true"}
+        # Build query parameters using hLimit and hOffset
+        params = {"hLimit": str(h_limit), "hOffset": str(h_offset), "count": "true"}
 
         # Build headers
         headers = {
@@ -87,7 +90,7 @@ class STHCometGateway(ISTHCometGateway):
             entity_type=entity_type,
             entity_id=entity_id,
             attribute=attribute,
-            last_n=last_n,
+            h_limit=h_limit,
             h_offset=h_offset,
         )
 
@@ -118,7 +121,7 @@ class STHCometGateway(ISTHCometGateway):
             logger.error("STH-Comet unexpected error", error=str(e), url=url)
             raise STHCometError(f"STH-Comet unexpected error: {str(e)}") from e
 
-    async def get_total_count(
+    async def get_total_count_from_header(
         self,
         entity_type: str,
         entity_id: str,
@@ -126,19 +129,19 @@ class STHCometGateway(ISTHCometGateway):
         fiware_service: str = "smart",
         fiware_servicepath: str = "/",
     ) -> int:
-        """Get total count of available data points."""
+        """Get total count of available data points from fiware-total-count header."""
 
         # URL encode entity_id
         encoded_entity_id = quote(entity_id, safe="")
 
-        # Build URL for count only
+        # Build URL
         url = (
             f"{self.base_url}/STH/v1/contextEntities/type/{entity_type}/"
             f"id/{encoded_entity_id}/attributes/{attribute}"
         )
 
-        # Build query parameters (count only, no data)
-        params = {"lastN": "1", "count": "true"}  # Minimum to get count
+        # Build query parameters (minimal request to get count)
+        params = {"hLimit": "1", "hOffset": "0", "count": "true"}
 
         # Build headers
         headers = {
@@ -148,7 +151,7 @@ class STHCometGateway(ISTHCometGateway):
         }
 
         logger.info(
-            "Getting total count from STH-Comet",
+            "Getting total count from STH-Comet header",
             url=url,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -160,8 +163,21 @@ class STHCometGateway(ISTHCometGateway):
                 response = await client.get(url, params=params, headers=headers)
                 response.raise_for_status()
 
-                data = response.json()
-                return self._extract_count_from_response(data)
+                # Extract total count from response headers
+                total_count_header = response.headers.get("fiware-total-count")
+                if total_count_header:
+                    total_count = int(total_count_header)
+                    logger.info(
+                        "Got total count from header",
+                        total_count=total_count,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        attribute=attribute,
+                    )
+                    return total_count
+                else:
+                    logger.warning("fiware-total-count header not found in response")
+                    return 0
 
         except httpx.HTTPStatusError as e:
             logger.error(
@@ -252,28 +268,3 @@ class STHCometGateway(ISTHCometGateway):
         except Exception as e:
             logger.error(f"Error parsing STH-Comet response: {e}", response_data=data)
             raise STHCometError(f"Failed to parse STH-Comet response: {e}") from e
-
-    def _extract_count_from_response(self, data: dict) -> int:
-        """Extract total count from STH-Comet response."""
-
-        try:
-            context_responses = data.get("contextResponses", [])
-            if not context_responses:
-                return 0
-
-            # Get status code from first context response
-            status_code = context_responses[0].get("statusCode", {})
-            details = status_code.get("details", "")
-
-            # Parse count from details (format: "Count: X")
-            if "Count:" in details:
-                count_str = details.split("Count:")[1].strip()
-                return int(count_str)
-
-            return 0
-
-        except Exception as e:
-            logger.error(
-                f"Error extracting count from response: {e}", response_data=data
-            )
-            raise STHCometError(f"Failed to extract count: {e}") from e

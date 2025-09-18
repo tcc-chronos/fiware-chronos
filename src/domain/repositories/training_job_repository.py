@@ -93,10 +93,10 @@ class ITrainingJobRepository(ABC):
         self,
         training_job_id: UUID,
         metrics: TrainingMetrics,
-        model_artifact_path: str,
-        x_scaler_path: str,
-        y_scaler_path: str,
-        metadata_path: str,
+        model_artifact_id: str,
+        x_scaler_artifact_id: str,
+        y_scaler_artifact_id: str,
+        metadata_artifact_id: str,
     ) -> bool:
         """Complete a training job with results."""
         pass

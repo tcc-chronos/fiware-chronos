@@ -68,13 +68,13 @@ def collect_data_chunk(
     entity_type: str,
     entity_id: str,
     attribute: str,
-    last_n: int,
+    h_limit: int,
     h_offset: int,
     fiware_service: str = "smart",
     fiware_servicepath: str = "/",
 ) -> Dict[str, Any]:
     """
-    Collect a chunk of data from STH-Comet.
+    Collect a chunk of data from STH-Comet using hLimit and hOffset.
 
     Args:
         job_id: Data collection job ID
@@ -82,8 +82,8 @@ def collect_data_chunk(
         entity_type: FIWARE entity type
         entity_id: FIWARE entity ID
         attribute: Attribute to collect
-        last_n: Number of data points to collect (max 100 per STH-Comet limitation)
-        h_offset: Historical offset
+        h_limit: Number of data points to collect (max 100 per STH-Comet limitation)
+        h_offset: Historical offset from total count
         fiware_service: FIWARE service
         fiware_servicepath: FIWARE service path
 
@@ -98,7 +98,7 @@ def collect_data_chunk(
             entity_type=entity_type,
             entity_id=entity_id,
             attribute=attribute,
-            last_n=last_n,
+            h_limit=h_limit,
             h_offset=h_offset,
         )
 
@@ -137,7 +137,7 @@ def collect_data_chunk(
                 entity_type=entity_type,
                 entity_id=entity_id,
                 attribute=attribute,
-                last_n=last_n,
+                h_limit=h_limit,
                 h_offset=h_offset,
                 fiware_service=fiware_service,
                 fiware_servicepath=fiware_servicepath,
@@ -145,11 +145,12 @@ def collect_data_chunk(
         )
 
         # Convert to serializable format with precise timestamp handling
+        # Use "value" as the key to ensure consistency with preprocessing
         data_points = [
             {
                 "timestamp": point.timestamp.isoformat(),
                 "value": point.value,
-                "h_offset": h_offset,  # Include offset for debugging
+                "h_offset": h_offset,
             }
             for point in collected_data
         ]
@@ -170,9 +171,9 @@ def collect_data_chunk(
                 "data_points": [],
                 "h_offset": h_offset,
                 "chunk_info": {
-                    "requested_last_n": last_n,
+                    "requested_h_limit": h_limit,
                     "actual_collected": 0,
-                    "offset": h_offset,
+                    "h_offset": h_offset,
                 },
                 "message": "Job was cancelled.",
             }
@@ -208,9 +209,9 @@ def collect_data_chunk(
             "data_points": data_points,
             "h_offset": h_offset,
             "chunk_info": {
-                "requested_last_n": last_n,
+                "requested_h_limit": h_limit,
                 "actual_collected": len(collected_data),
-                "offset": h_offset,
+                "h_offset": h_offset,
             },
         }
 
@@ -221,7 +222,7 @@ def collect_data_chunk(
             training_job_id=training_job_id,
             error=str(exc),
             h_offset=h_offset,
-            last_n=last_n,
+            h_limit=h_limit,
             exc_info=True,
         )
 
@@ -268,7 +269,7 @@ def collect_data_chunk(
             "status": "failed",
             "error": str(exc),
             "h_offset": h_offset,
-            "last_n": last_n,
+            "h_limit": h_limit,
             "retries_exhausted": True,
         }
 
@@ -303,11 +304,11 @@ def train_model_task(
 
         # Import here to avoid circular imports
         from src.application.dtos.training_dto import CollectedDataDTO
-        from src.application.use_cases.model_training_use_case import (
-            ModelTrainingUseCase,
-        )
         from src.domain.entities.model import Model, ModelType
         from src.infrastructure.database.mongo_database import MongoDatabase
+        from src.infrastructure.repositories.gridfs_model_artifacts_repository import (
+            GridFSModelArtifactsRepository,
+        )
         from src.infrastructure.repositories.training_job_repository import (
             TrainingJobRepository,
         )
@@ -322,7 +323,19 @@ def train_model_task(
             db_name=settings.database.database_name,
         )
         training_job_repo = TrainingJobRepository(database)
-        model_training = ModelTrainingUseCase()
+
+        # Initialize GridFS artifacts repository
+        artifacts_repo = GridFSModelArtifactsRepository(
+            mongo_client=database.client,
+            database_name=settings.database.database_name,
+        )
+
+        # Initialize model training use case with GridFS repository
+        from src.application.use_cases.model_training_use_case import (
+            ModelTrainingUseCase,
+        )
+
+        model_training = ModelTrainingUseCase(artifacts_repository=artifacts_repo)
 
         # Update training job status
         asyncio.run(
@@ -334,33 +347,65 @@ def train_model_task(
         )
 
         # Convert model config dict to Model entity
-        model = Model(
-            id=UUID(model_config["id"]),
-            name=model_config["name"],
-            model_type=ModelType(model_config["model_type"]),
-            rnn_units=model_config["rnn_units"],
-            dense_units=model_config["dense_units"],
-            rnn_dropout=model_config["rnn_dropout"],
-            dense_dropout=model_config["dense_dropout"],
-            learning_rate=model_config["learning_rate"],
-            batch_size=model_config["batch_size"],
-            epochs=model_config["epochs"],
-            early_stopping_patience=model_config.get("early_stopping_patience"),
-            feature=model_config["feature"],
-            entity_type=model_config.get("entity_type"),
-            entity_id=model_config.get("entity_id"),
-        )
+        model = Model()
+        model.id = UUID(model_config["id"])
+        model.name = model_config["name"]
+        model.model_type = ModelType(model_config["model_type"])
+        model.rnn_units = model_config["rnn_units"]
+        model.dense_units = model_config["dense_units"]
+        model.rnn_dropout = model_config["rnn_dropout"]
+        model.dense_dropout = model_config["dense_dropout"]
+        model.learning_rate = model_config["learning_rate"]
+        model.batch_size = model_config["batch_size"]
+        model.epochs = model_config["epochs"]
+        model.early_stopping_patience = model_config.get("early_stopping_patience")
+        model.feature = model_config["feature"]
+        model.entity_type = model_config.get("entity_type")
+        model.entity_id = model_config.get("entity_id")
 
         # Convert collected data to DTOs
         data_dtos = [
             CollectedDataDTO(
-                timestamp=datetime.fromisoformat(item["timestamp"]), value=item["value"]
+                timestamp=datetime.fromisoformat(item["timestamp"]),
+                value=item["value"],  # Use consistent "value" key
             )
             for item in collected_data
         ]
 
+        # Validate we have enough data after deduplication
+        if len(data_dtos) < window_size + 10:
+            error_msg = (
+                f"Insufficient data: {len(data_dtos)} points available, "
+                f"need at least {window_size + 10} for window_size={window_size}"
+            )
+            logger.warning(
+                "Insufficient data after processing",
+                available_points=len(data_dtos),
+                required_minimum=window_size + 10,
+                window_size=window_size,
+            )
+            # Update job status with specific error
+            asyncio.run(
+                training_job_repo.update_training_job_status(
+                    UUID(training_job_id),
+                    TrainingStatus.FAILED,
+                    training_end=datetime.now(timezone.utc),
+                )
+            )
+            return {
+                "training_job_id": training_job_id,
+                "status": "failed",
+                "error": error_msg,
+            }
+
         # Train model
-        metrics, model_path, x_scaler_path, y_scaler_path, metadata_path = asyncio.run(
+        (
+            metrics,
+            model_artifact_id,
+            x_scaler_artifact_id,
+            y_scaler_artifact_id,
+            metadata_artifact_id,
+        ) = asyncio.run(
             model_training.execute(
                 model_config=model, collected_data=data_dtos, window_size=window_size
             )
@@ -383,10 +428,10 @@ def train_model_task(
                 training_job_repo.complete_training_job(
                     UUID(training_job_id),
                     metrics=metrics,
-                    model_artifact_path=model_path,
-                    x_scaler_path=x_scaler_path,
-                    y_scaler_path=y_scaler_path,
-                    metadata_path=metadata_path,
+                    model_artifact_id=model_artifact_id,
+                    x_scaler_artifact_id=x_scaler_artifact_id,
+                    y_scaler_artifact_id=y_scaler_artifact_id,
+                    metadata_artifact_id=metadata_artifact_id,
                 )
             )
 
@@ -400,10 +445,10 @@ def train_model_task(
             "training_job_id": training_job_id,
             "status": "completed",
             "metrics": metrics.__dict__,
-            "model_path": model_path,
-            "x_scaler_path": x_scaler_path,
-            "y_scaler_path": y_scaler_path,
-            "metadata_path": metadata_path,
+            "model_artifact_id": model_artifact_id,
+            "x_scaler_artifact_id": x_scaler_artifact_id,
+            "y_scaler_artifact_id": y_scaler_artifact_id,
+            "metadata_artifact_id": metadata_artifact_id,
         }
 
     except Exception as exc:
@@ -495,6 +540,11 @@ def orchestrate_training(
         training_job_repo = TrainingJobRepository(database)
         model_repo = ModelRepository(database)
 
+        # Initialize STH gateway for getting total count
+        from src.infrastructure.gateways.sth_comet_gateway import STHCometGateway
+
+        sth_gateway = STHCometGateway(settings.fiware.sth_url)
+
         # Get model configuration
         model = asyncio.run(model_repo.find_by_id(UUID(model_id)))
         if not model:
@@ -514,6 +564,18 @@ def orchestrate_training(
             feature=model.feature,
         )
 
+        # Validate training parameters make sense
+        min_required_data = (
+            window_size + 20
+        )  # Need enough for meaningful train/val/test splits
+        if last_n < min_required_data:
+            raise ValueError(
+                f"Insufficient training data requested: {last_n} points. "
+                f"Need at least {min_required_data} points  "
+                f"for window_size={window_size} to create "
+                f"meaningful train/validation/test splits."
+            )
+
         # Update training job status
         asyncio.run(
             training_job_repo.update_training_job_status(
@@ -523,21 +585,62 @@ def orchestrate_training(
             )
         )
 
+        # Validate model has required fields
+        if not model.entity_type or not model.entity_id:
+            raise ValueError(f"Model {model_id} missing entity_type or entity_id")
+
+        # First, get total count of available data
+        total_count = asyncio.run(
+            sth_gateway.get_total_count_from_header(
+                entity_type=model.entity_type,
+                entity_id=model.entity_id,
+                attribute=model.feature,
+                fiware_service="smart",
+                fiware_servicepath="/",
+            )
+        )
+
+        logger.info(
+            "Got total available data count",
+            total_count=total_count,
+            requested_last_n=last_n,
+            entity_type=model.entity_type,
+            entity_id=model.entity_id,
+            attribute=model.feature,
+        )
+
+        # Validate we have enough data
+        if total_count < last_n:
+            logger.warning(
+                "Requested more data than available",
+                requested=last_n,
+                available=total_count,
+            )
+            # Adjust last_n to available data
+            last_n = total_count
+
+        if total_count == 0:
+            raise ValueError(f"No data available for entity {model.entity_id}")
+
         # Calculate optimal data collection strategy
         # STH-Comet has a hard limit (configurable)
         max_per_request = settings.fiware.max_per_request
         collection_jobs = []
         remaining = last_n
-        h_offset = 0
 
-        # Create collection jobs with better distribution
+        # Calculate starting offset (we want the most recent N points)
+        # STH-Comet data is ordered from oldest to newest
+        # To get most recent N points, we start from (total_count - last_n)
+        current_h_offset = max(0, total_count - last_n)
+
+        # Create collection jobs with proper offsets
         while remaining > 0:
             chunk_size = min(remaining, max_per_request)
-            job = DataCollectionJob(h_offset=h_offset, last_n=chunk_size)
+            job = DataCollectionJob(h_offset=current_h_offset, last_n=chunk_size)
             collection_jobs.append(job)
 
             remaining -= chunk_size
-            h_offset += chunk_size
+            current_h_offset += chunk_size
 
         # Add collection jobs to training job for tracking
         for job in collection_jobs:
@@ -550,7 +653,9 @@ def orchestrate_training(
             training_job_id=training_job_id,
             total_jobs=len(collection_jobs),
             total_requested=last_n,
+            total_available=total_count,
             chunk_size=max_per_request,
+            starting_offset=max(0, total_count - last_n),
             estimated_parallel_requests=len(collection_jobs),
         )
 
@@ -563,7 +668,7 @@ def orchestrate_training(
                     entity_type=model.entity_type,
                     entity_id=model.entity_id,
                     attribute=model.feature,
-                    last_n=job.last_n,
+                    h_limit=job.last_n,  # last_n stores the chunk size (h_limit)
                     h_offset=job.h_offset,
                 ).set(queue="data_collection")
                 for job in collection_jobs

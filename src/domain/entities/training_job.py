@@ -92,10 +92,10 @@ class TrainingJob:
 
     # Results
     metrics: Optional[TrainingMetrics] = None
-    model_artifact_path: Optional[str] = None
-    x_scaler_path: Optional[str] = None
-    y_scaler_path: Optional[str] = None
-    metadata_path: Optional[str] = None
+    model_artifact_id: Optional[str] = None
+    x_scaler_artifact_id: Optional[str] = None
+    y_scaler_artifact_id: Optional[str] = None
+    metadata_artifact_id: Optional[str] = None
 
     # Error handling
     error: Optional[str] = None

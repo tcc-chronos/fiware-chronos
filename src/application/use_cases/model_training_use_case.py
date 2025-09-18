@@ -5,8 +5,10 @@ This module contains the use case for training deep learning models (LSTM/GRU).
 It handles model creation, compilation, training, and evaluation.
 """
 
+import io
 import json
 import os
+import tempfile
 import time
 from datetime import datetime
 from typing import List, Tuple
@@ -26,6 +28,7 @@ from src.application.use_cases.data_preprocessing_use_case import (
 )
 from src.domain.entities.model import Model
 from src.domain.entities.training_job import TrainingMetrics
+from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -39,14 +42,20 @@ class ModelTrainingError(Exception):
 class ModelTrainingUseCase:
     """Use case for training deep learning models."""
 
-    def __init__(self, save_directory: str = "/tmp/models"):
+    def __init__(
+        self,
+        artifacts_repository: IModelArtifactsRepository,
+        save_directory: str = "/tmp/models",
+    ):
         """
         Initialize the model training use case.
 
         Args:
-            save_directory: Directory to save trained models and artifacts
+            artifacts_repository: Repository for storing model artifacts
+            save_directory: Temporary directory for intermediate files (deprecated)
         """
-        self.save_directory = save_directory
+        self.artifacts_repository = artifacts_repository
+        self.save_directory = save_directory  # Keep for backward compatibility
         self.data_preprocessing = DataPreprocessingUseCase()
 
         # Create save directory if it doesn't exist
@@ -67,7 +76,8 @@ class ModelTrainingUseCase:
             window_size: Sequence window size
 
         Returns:
-            Tuple of (metrics, model_path, x_scaler_path, y_scaler_path, metadata_path)
+            Tuple of (metrics, model_artifact_id, x_scaler_artifact_id,
+            y_scaler_artifact_id, metadata_artifact_id)
 
         Raises:
             ModelTrainingError: When training fails
@@ -100,8 +110,8 @@ class ModelTrainingUseCase:
             ) = self.data_preprocessing.execute(
                 collected_data=collected_data,
                 window_size=window_size,
-                target_column=model_config.feature,
-                feature_columns=[model_config.feature],  # Single feature for now
+                target_column="value",  # Use "value" as the consistent column name
+                feature_columns=["value"],  # Use "value" for consistency
             )
 
             logger.info(
@@ -144,24 +154,27 @@ class ModelTrainingUseCase:
             )
 
             # Save artifacts
-            model_path, x_scaler_path, y_scaler_path, metadata_path = (
-                self._save_artifacts(
-                    model=model,
-                    x_scaler=x_scaler,
-                    y_scaler=y_scaler,
-                    model_config=model_config,
-                    window_size=window_size,
-                    feature_columns=feature_columns,
-                    training_history=training_history,
-                    test_metrics=test_metrics,
-                    training_duration=training_duration,
-                    data_info={
-                        "total_points": len(collected_data),
-                        "train_sequences": len(x_train),
-                        "val_sequences": len(x_val),
-                        "test_sequences": len(x_test),
-                    },
-                )
+            (
+                model_artifact_id,
+                x_scaler_artifact_id,
+                y_scaler_artifact_id,
+                metadata_artifact_id,
+            ) = await self._save_artifacts(
+                model=model,
+                x_scaler=x_scaler,
+                y_scaler=y_scaler,
+                model_config=model_config,
+                window_size=window_size,
+                feature_columns=feature_columns,
+                training_history=training_history,
+                test_metrics=test_metrics,
+                training_duration=training_duration,
+                data_info={
+                    "total_points": len(collected_data),
+                    "train_sequences": len(x_train),
+                    "val_sequences": len(x_val),
+                    "test_sequences": len(x_test),
+                },
             )
 
             # Create metrics object
@@ -178,7 +191,13 @@ class ModelTrainingUseCase:
                 best_epoch=training_history.get("best_epoch"),
             )
 
-            return metrics, model_path, x_scaler_path, y_scaler_path, metadata_path
+            return (
+                metrics,
+                model_artifact_id,
+                x_scaler_artifact_id,
+                y_scaler_artifact_id,
+                metadata_artifact_id,
+            )
 
         except Exception as e:
             logger.error(f"Model training failed: {str(e)}", error=str(e))
@@ -412,7 +431,7 @@ class ModelTrainingUseCase:
 
         return mae_pct, rmse_pct, mape
 
-    def _save_artifacts(
+    async def _save_artifacts(
         self,
         model: Sequential,
         x_scaler,
@@ -425,71 +444,111 @@ class ModelTrainingUseCase:
         training_duration: float,
         data_info: dict,
     ) -> Tuple[str, str, str, str]:
-        """Save model artifacts and metadata."""
+        """Save model artifacts to GridFS and return artifact IDs."""
 
-        # Generate file paths
-        model_id = str(model_config.id)
+        model_id = model_config.id
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        model_path = os.path.join(
-            self.save_directory, f"{model_id}_{timestamp}_model.keras"
-        )
-        x_scaler_path = os.path.join(
-            self.save_directory, f"{model_id}_{timestamp}_x_scaler.pkl"
-        )
-        y_scaler_path = os.path.join(
-            self.save_directory, f"{model_id}_{timestamp}_y_scaler.pkl"
-        )
-        metadata_path = os.path.join(
-            self.save_directory, f"{model_id}_{timestamp}_metadata.json"
-        )
+        try:
+            # Prepare metadata
+            metadata = {
+                "model_id": str(model_id),
+                "timestamp": timestamp,
+                "window_size": window_size,
+                "feature_columns": feature_columns,
+                "training_history": training_history,
+                "test_metrics": test_metrics,
+                "training_duration": training_duration,
+                "data_info": data_info,
+                "model_config": {
+                    "model_type": model_config.model_type.value,
+                    "rnn_units": model_config.rnn_units,
+                    "dense_units": model_config.dense_units,
+                    "batch_size": model_config.batch_size,
+                    "epochs": model_config.epochs,
+                    "learning_rate": model_config.learning_rate,
+                    "validation_split": model_config.validation_split,
+                    "lookback_window": model_config.lookback_window,
+                    "forecast_horizon": model_config.forecast_horizon,
+                },
+            }
 
-        # Save model
-        model.save(model_path)
+            # Save model to bytes (Keras 3 format)
+            with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp:
+                model.save(tmp.name)  # ou tmp.name + ".h5"
+                tmp.seek(0)
+                model_bytes = tmp.read()
 
-        # Save scalers
-        joblib.dump(x_scaler, x_scaler_path)
-        joblib.dump(y_scaler, y_scaler_path)
+            os.unlink(tmp.name)
 
-        # Save metadata
-        metadata = {
-            "model_id": model_id,
-            "model_type": model_config.model_type.value,
-            "model_name": model_config.name,
-            "window_size": window_size,
-            "feature_columns": feature_columns,
-            "target_feature": model_config.feature,
-            # Model architecture
-            "rnn_units": model_config.rnn_units,
-            "dense_units": model_config.dense_units,
-            "rnn_dropout": model_config.rnn_dropout,
-            "dense_dropout": model_config.dense_dropout,
-            # Training configuration
-            "learning_rate": model_config.learning_rate,
-            "batch_size": model_config.batch_size,
-            "epochs": model_config.epochs,
-            "early_stopping_patience": model_config.early_stopping_patience,
-            # Data information
-            "data_info": data_info,
-            # Training results
-            "training_history": training_history,
-            "test_metrics": test_metrics,
-            "training_duration_seconds": training_duration,
-            # Metadata
-            "created_at": datetime.now().isoformat(),
-            "entity_type": model_config.entity_type,
-            "entity_id": model_config.entity_id,
-            # File paths
-            "model_path": model_path,
-            "x_scaler_path": x_scaler_path,
-            "y_scaler_path": y_scaler_path,
-        }
+            # Save x_scaler to bytes
+            x_scaler_buffer = io.BytesIO()
+            joblib.dump(x_scaler, x_scaler_buffer)
+            x_scaler_bytes = x_scaler_buffer.getvalue()
+            x_scaler_buffer.close()
 
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2)
+            # Save y_scaler to bytes
+            y_scaler_buffer = io.BytesIO()
+            joblib.dump(y_scaler, y_scaler_buffer)
+            y_scaler_bytes = y_scaler_buffer.getvalue()
+            y_scaler_buffer.close()
 
-        logger.info(
-            "Model artifacts saved", model_path=model_path, metadata_path=metadata_path
-        )
+            # Save metadata to bytes
+            metadata_bytes = json.dumps(metadata, indent=2, default=str).encode("utf-8")
 
-        return model_path, x_scaler_path, y_scaler_path, metadata_path
+            # Save all artifacts to GridFS
+            model_artifact_id = await self.artifacts_repository.save_artifact(
+                model_id=model_id,
+                artifact_type="model",
+                content=model_bytes,
+                metadata={"format": "tensorflow", "size": len(model_bytes)},
+                filename=f"{model_id}_{timestamp}_model.tf",
+            )
+
+            x_scaler_artifact_id = await self.artifacts_repository.save_artifact(
+                model_id=model_id,
+                artifact_type="x_scaler",
+                content=x_scaler_bytes,
+                metadata={"format": "pickle", "size": len(x_scaler_bytes)},
+                filename=f"{model_id}_{timestamp}_x_scaler.pkl",
+            )
+
+            y_scaler_artifact_id = await self.artifacts_repository.save_artifact(
+                model_id=model_id,
+                artifact_type="y_scaler",
+                content=y_scaler_bytes,
+                metadata={"format": "pickle", "size": len(y_scaler_bytes)},
+                filename=f"{model_id}_{timestamp}_y_scaler.pkl",
+            )
+
+            metadata_artifact_id = await self.artifacts_repository.save_artifact(
+                model_id=model_id,
+                artifact_type="metadata",
+                content=metadata_bytes,
+                metadata={"format": "json", "size": len(metadata_bytes)},
+                filename=f"{model_id}_{timestamp}_metadata.json",
+            )
+
+            logger.info(
+                "Model artifacts saved to GridFS",
+                model_id=str(model_id),
+                model_artifact_id=model_artifact_id,
+                x_scaler_artifact_id=x_scaler_artifact_id,
+                y_scaler_artifact_id=y_scaler_artifact_id,
+                metadata_artifact_id=metadata_artifact_id,
+            )
+
+            return (
+                model_artifact_id,
+                x_scaler_artifact_id,
+                y_scaler_artifact_id,
+                metadata_artifact_id,
+            )
+
+        except Exception as e:
+            logger.error(
+                "Failed to save model artifacts to GridFS",
+                model_id=str(model_id),
+                error=str(e),
+            )
+            raise ModelTrainingError(f"Failed to save artifacts: {e}") from e

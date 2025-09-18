@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from dependency_injector import containers, providers
 
 from src.application.use_cases.device_use_cases import GetDevicesUseCase
+from src.application.use_cases.model_training_use_case import ModelTrainingUseCase
 from src.application.use_cases.model_use_cases import (
     CreateModelUseCase,
     DeleteModelUseCase,
@@ -25,6 +26,9 @@ from src.application.use_cases.training_management_use_case import (
 from src.infrastructure.database import MongoDatabase
 from src.infrastructure.gateways.iot_agent_gateway import IoTAgentGateway
 from src.infrastructure.gateways.sth_comet_gateway import STHCometGateway
+from src.infrastructure.repositories.gridfs_model_artifacts_repository import (
+    GridFSModelArtifactsRepository,
+)
 from src.infrastructure.repositories.model_repository import ModelRepository
 from src.infrastructure.repositories.training_job_repository import (
     TrainingJobRepository,
@@ -60,6 +64,13 @@ class AppContainer(containers.DeclarativeContainer):
     training_job_repository = providers.Singleton(
         TrainingJobRepository,
         database=mongo_database,
+    )
+
+    # GridFS repository for model artifacts
+    model_artifacts_repository = providers.Singleton(
+        GridFSModelArtifactsRepository,
+        mongo_client=providers.Callable(lambda db: db.client, mongo_database),
+        database_name=config.database.database_name,
     )
 
     # Gateways
@@ -108,6 +119,11 @@ class AppContainer(containers.DeclarativeContainer):
         TrainingManagementUseCase,
         training_job_repository=training_job_repository,
         model_repository=model_repository,
+    )
+
+    model_training_use_case = providers.Factory(
+        ModelTrainingUseCase,
+        artifacts_repository=model_artifacts_repository,
     )
 
     # Presentation

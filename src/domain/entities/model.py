@@ -73,6 +73,12 @@ class Model:
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
 
+    # Model artifacts (GridFS file IDs)
+    model_artifact_id: Optional[str] = None
+    x_scaler_artifact_id: Optional[str] = None
+    y_scaler_artifact_id: Optional[str] = None
+    metadata_artifact_id: Optional[str] = None
+
     # Other attributes
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -118,3 +124,40 @@ class Model:
             return max(trainings_with_metric, key=lambda t: t.metrics[metric])
         else:
             return min(trainings_with_metric, key=lambda t: t.metrics[metric])
+
+    def set_artifact_ids(
+        self,
+        model_artifact_id: Optional[str] = None,
+        x_scaler_artifact_id: Optional[str] = None,
+        y_scaler_artifact_id: Optional[str] = None,
+        metadata_artifact_id: Optional[str] = None,
+    ) -> None:
+        """Set the GridFS artifact IDs for the model components."""
+        if model_artifact_id is not None:
+            self.model_artifact_id = model_artifact_id
+        if x_scaler_artifact_id is not None:
+            self.x_scaler_artifact_id = x_scaler_artifact_id
+        if y_scaler_artifact_id is not None:
+            self.y_scaler_artifact_id = y_scaler_artifact_id
+        if metadata_artifact_id is not None:
+            self.metadata_artifact_id = metadata_artifact_id
+        self.update_timestamp()
+
+    def has_trained_artifacts(self) -> bool:
+        """Check if the model has all required trained artifacts."""
+        return all(
+            [
+                self.model_artifact_id,
+                self.x_scaler_artifact_id,
+                self.y_scaler_artifact_id,
+                self.metadata_artifact_id,
+            ]
+        )
+
+    def clear_artifacts(self) -> None:
+        """Clear all artifact IDs (useful when retraining)."""
+        self.model_artifact_id = None
+        self.x_scaler_artifact_id = None
+        self.y_scaler_artifact_id = None
+        self.metadata_artifact_id = None
+        self.update_timestamp()

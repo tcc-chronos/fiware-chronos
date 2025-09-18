@@ -333,7 +333,7 @@ class TrainingManagementUseCase:
             training_start=training_job.training_start,
             training_end=training_job.training_end,
             metrics=metrics,
-            model_artifact_path=training_job.model_artifact_path,
+            model_artifact_id=training_job.model_artifact_id,
             error=training_job.error,
             error_details=training_job.error_details,
             created_at=training_job.created_at,

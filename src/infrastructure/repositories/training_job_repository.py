@@ -317,12 +317,12 @@ class TrainingJobRepository(ITrainingJobRepository):
         self,
         training_job_id: UUID,
         metrics: TrainingMetrics,
-        model_artifact_path: str,
-        x_scaler_path: str,
-        y_scaler_path: str,
-        metadata_path: str,
+        model_artifact_id: str,
+        x_scaler_artifact_id: str,
+        y_scaler_artifact_id: str,
+        metadata_artifact_id: str,
     ) -> bool:
-        """Complete a training job with results."""
+        """Complete a training job with results and GridFS artifact IDs."""
         try:
             collection = self.database.get_collection(self.collection_name)
 
@@ -348,10 +348,10 @@ class TrainingJobRepository(ITrainingJobRepository):
                         "status": TrainingStatus.COMPLETED.value,
                         "end_time": datetime.now(timezone.utc).isoformat(),
                         "metrics": metrics_dict,
-                        "model_artifact_path": model_artifact_path,
-                        "x_scaler_path": x_scaler_path,
-                        "y_scaler_path": y_scaler_path,
-                        "metadata_path": metadata_path,
+                        "model_artifact_id": model_artifact_id,
+                        "x_scaler_artifact_id": x_scaler_artifact_id,
+                        "y_scaler_artifact_id": y_scaler_artifact_id,
+                        "metadata_artifact_id": metadata_artifact_id,
                         "updated_at": datetime.now(timezone.utc).isoformat(),
                     }
                 },
@@ -477,10 +477,10 @@ class TrainingJobRepository(ITrainingJobRepository):
                 else None
             ),
             "metrics": metrics_doc,
-            "model_artifact_path": training_job.model_artifact_path,
-            "x_scaler_path": training_job.x_scaler_path,
-            "y_scaler_path": training_job.y_scaler_path,
-            "metadata_path": training_job.metadata_path,
+            "model_artifact_id": training_job.model_artifact_id,
+            "x_scaler_artifact_id": training_job.x_scaler_artifact_id,
+            "y_scaler_artifact_id": training_job.y_scaler_artifact_id,
+            "metadata_artifact_id": training_job.metadata_artifact_id,
             "error": training_job.error,
             "error_details": training_job.error_details,
             "created_at": training_job.created_at.isoformat(),
@@ -579,10 +579,10 @@ class TrainingJobRepository(ITrainingJobRepository):
                 else None
             ),
             metrics=metrics,
-            model_artifact_path=document.get("model_artifact_path"),
-            x_scaler_path=document.get("x_scaler_path"),
-            y_scaler_path=document.get("y_scaler_path"),
-            metadata_path=document.get("metadata_path"),
+            model_artifact_id=document.get("model_artifact_id"),
+            x_scaler_artifact_id=document.get("x_scaler_artifact_id"),
+            y_scaler_artifact_id=document.get("y_scaler_artifact_id"),
+            metadata_artifact_id=document.get("metadata_artifact_id"),
             error=document.get("error"),
             error_details=document.get("error_details"),
             created_at=datetime.fromisoformat(document["created_at"]),

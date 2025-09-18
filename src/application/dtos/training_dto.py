@@ -82,6 +82,7 @@ class TrainingJobDTO(BaseModel):
     # Results
     metrics: Optional[TrainingMetricsDTO] = None
     model_artifact_path: Optional[str] = None
+    model_artifact_id: Optional[str] = None
 
     # Error handling
     error: Optional[str] = None
