@@ -115,12 +115,14 @@ class TrainingJob:
         self.update_timestamp()
 
     def get_data_collection_progress(self) -> float:
-        """Get the progress of data collection as a percentage."""
-        if self.total_data_points_requested == 0:
+        try:
+            requested = int(self.total_data_points_requested or 0)
+            collected = int(self.total_data_points_collected or 0)
+            if requested == 0:
+                return 0.0
+            return (collected / requested) * 100.0
+        except Exception:
             return 0.0
-        return (
-            self.total_data_points_collected / self.total_data_points_requested
-        ) * 100.0
 
     def mark_data_collection_complete(self) -> None:
         """Mark data collection phase as complete."""
