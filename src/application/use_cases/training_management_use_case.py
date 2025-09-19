@@ -19,6 +19,7 @@ from src.application.dtos.training_dto import (
     TrainingRequestDTO,
 )
 from src.domain.entities.training_job import TrainingJob, TrainingStatus
+from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
 
@@ -38,6 +39,7 @@ class TrainingManagementUseCase:
         self,
         training_job_repository: ITrainingJobRepository,
         model_repository: IModelRepository,
+        artifacts_repository: IModelArtifactsRepository,
     ):
         """
         Initialize the training management use case.
@@ -48,6 +50,7 @@ class TrainingManagementUseCase:
         """
         self.training_job_repository = training_job_repository
         self.model_repository = model_repository
+        self.artifacts_repository = artifacts_repository
 
     async def start_training(
         self, model_id: UUID, request: TrainingRequestDTO
@@ -279,6 +282,103 @@ class TrainingManagementUseCase:
                 raise e
             raise TrainingManagementError(
                 f"Failed to cancel training job: {str(e)}"
+            ) from e
+
+    async def delete_training_job(self, training_job_id: UUID) -> bool:
+        """
+        Delete a training job and its generated artifacts.
+
+        Args:
+            training_job_id: ID of the training job to delete
+
+        Returns:
+            True when the training job is deleted successfully.
+
+        Raises:
+            TrainingManagementError: When the job cannot be deleted
+        """
+        try:
+            training_job = await self.training_job_repository.get_by_id(training_job_id)
+
+            if not training_job:
+                logger.warning(
+                    "Training job not found for deletion",
+                    training_job_id=str(training_job_id),
+                )
+                return False
+
+            if training_job.status in [
+                TrainingStatus.PENDING,
+                TrainingStatus.COLLECTING_DATA,
+                TrainingStatus.PREPROCESSING,
+                TrainingStatus.TRAINING,
+            ]:
+                raise TrainingManagementError(
+                    f"Training job {training_job_id} is still running. "
+                    f" Cancel it before deleting."
+                )
+
+            artifact_ids = [
+                training_job.model_artifact_id,
+                training_job.x_scaler_artifact_id,
+                training_job.y_scaler_artifact_id,
+                training_job.metadata_artifact_id,
+            ]
+
+            for artifact_id in artifact_ids:
+                if not artifact_id:
+                    continue
+
+                try:
+                    deleted = await self.artifacts_repository.delete_artifact(
+                        artifact_id
+                    )
+
+                    if deleted:
+                        logger.info(
+                            "Training artifact deleted",
+                            training_job_id=str(training_job_id),
+                            artifact_id=artifact_id,
+                        )
+                    else:
+                        logger.warning(
+                            "Training artifact not found for deletion",
+                            training_job_id=str(training_job_id),
+                            artifact_id=artifact_id,
+                        )
+
+                except Exception as e:
+                    logger.error(
+                        "Failed to delete training artifact",
+                        training_job_id=str(training_job_id),
+                        artifact_id=artifact_id,
+                        error=str(e),
+                    )
+                    raise TrainingManagementError(
+                        "Failed to delete training artifacts"
+                    ) from e
+
+            deleted = await self.training_job_repository.delete(training_job_id)
+
+            if deleted:
+                logger.info(
+                    "Training job deleted successfully",
+                    training_job_id=str(training_job_id),
+                )
+
+            return deleted
+
+        except TrainingManagementError:
+            raise
+
+        except Exception as e:
+            logger.error(
+                "Failed to delete training job",
+                training_job_id=str(training_job_id),
+                error=str(e),
+            )
+            raise TrainingManagementError(
+                f"Failed to delete training job: {str(e)}"
             ) from e
 
     def _to_training_job_dto(self, training_job: TrainingJob) -> TrainingJobDTO:

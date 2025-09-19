@@ -242,3 +242,55 @@ async def cancel_training_job(
             error=str(e),
         )
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete(
+    "/training-jobs/{training_job_id}",
+    summary="Delete training job",
+    description="""
+    Delete a training job and its generated artifacts.
+    Only completed, failed, or cancelled jobs can be deleted.
+    """,
+)
+@inject
+async def delete_training_job(
+    training_job_id: UUID,
+    training_use_case: TrainingManagementUseCase = Depends(
+        Provide[AppContainer.training_management_use_case]
+    ),
+) -> dict:
+    """Delete a training job and associated artifacts."""
+    try:
+        deleted = await training_use_case.delete_training_job(training_job_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Training job {training_job_id} not found",
+            )
+
+        logger.info(
+            "Training job deleted",
+            training_job_id=str(training_job_id),
+        )
+
+        return {"message": f"Training job {training_job_id} deleted successfully"}
+
+    except TrainingManagementError as e:
+        logger.error(
+            "Training deletion failed",
+            training_job_id=str(training_job_id),
+            error=str(e),
+        )
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.error(
+            "Unexpected error deleting training job",
+            training_job_id=str(training_job_id),
+            error=str(e),
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")

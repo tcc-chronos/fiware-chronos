@@ -119,6 +119,7 @@ class AppContainer(containers.DeclarativeContainer):
         TrainingManagementUseCase,
         training_job_repository=training_job_repository,
         model_repository=model_repository,
+        artifacts_repository=model_artifacts_repository,
     )
 
     model_training_use_case = providers.Factory(
