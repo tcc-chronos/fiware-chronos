@@ -25,7 +25,8 @@ services:
   worker:
     build:
       context: ../..
-      dockerfile: deploy/docker/Dockerfile.worker
+      dockerfile: deploy/docker/Dockerfile
+      target: worker
     restart: unless-stopped
     env_file:
       - ../../.env
@@ -74,7 +75,11 @@ services:
   api:
     build:
       context: ../..
-      dockerfile: deploy/docker/Dockerfile.api
+      dockerfile: deploy/docker/Dockerfile
+      target: api
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     env_file:
       - ../../.env

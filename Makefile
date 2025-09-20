@@ -1,7 +1,10 @@
-.PHONY: up stop run format lint
+.PHONY: up build stop run format lint
 
 up:
 	./scripts/docker/docker_up.sh $(ARGS)
+
+build:
+	./scripts/docker/docker_build.sh $(ARGS)
 
 stop:
 	./scripts/docker/docker_stop.sh

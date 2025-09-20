@@ -1,0 +1,38 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+coverage/
+htmlcov/
+
+# VCS and editor files
+.git
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+
+# Local environment files
+.env
+.env.*
+
+# Project artifacts not needed for builds
+tests/
+docs/
+deploy/docker/docker-compose*.yml
+deploy/docker/promtail-config.yaml
+
+# Misc
+*.log
+tmp/
