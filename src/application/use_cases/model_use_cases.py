@@ -13,7 +13,9 @@ from dependency_injector.wiring import Provide, inject
 
 from src.domain.entities.errors import ModelNotFoundError
 from src.domain.entities.model import Model
+from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
+from src.domain.repositories.training_job_repository import ITrainingJobRepository
 
 from ..dtos.model_dto import (
     ModelCreateDTO,
@@ -376,9 +378,18 @@ class DeleteModelUseCase:
 
     @inject
     def __init__(
-        self, model_repository: IModelRepository = Provide["model_repository"]
+        self,
+        model_repository: IModelRepository = Provide["model_repository"],
+        training_job_repository: ITrainingJobRepository = Provide[
+            "training_job_repository"
+        ],
+        artifacts_repository: IModelArtifactsRepository = Provide[
+            "model_artifacts_repository"
+        ],
     ):
         self.model_repository = model_repository
+        self.training_job_repository = training_job_repository
+        self.artifacts_repository = artifacts_repository
 
     async def execute(self, model_id: UUID) -> None:
         """
@@ -394,6 +405,13 @@ class DeleteModelUseCase:
         model = await self.model_repository.find_by_id(model_id)
         if not model:
             raise ModelNotFoundError(str(model_id))
+
+        # Delete associated training jobs and artifacts before removing the model
+        training_jobs = await self.training_job_repository.get_by_model_id(model_id)
+        for training_job in training_jobs:
+            await self.training_job_repository.delete(training_job.id)
+
+        await self.artifacts_repository.delete_model_artifacts(model_id)
 
         # Delete the model
         await self.model_repository.delete(model_id)

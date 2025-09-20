@@ -108,6 +108,8 @@ class AppContainer(containers.DeclarativeContainer):
     delete_model_use_case = providers.Factory(
         DeleteModelUseCase,
         model_repository=model_repository,
+        training_job_repository=training_job_repository,
+        artifacts_repository=model_artifacts_repository,
     )
 
     get_devices_use_case = providers.Factory(
