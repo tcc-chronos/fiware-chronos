@@ -47,11 +47,6 @@ class ITrainingJobRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_all(self, skip: int = 0, limit: int = 100) -> List[TrainingJob]:
-        """List all training jobs with pagination."""
-        pass
-
-    @abstractmethod
     async def add_data_collection_job(
         self, training_job_id: UUID, job: DataCollectionJob
     ) -> bool:

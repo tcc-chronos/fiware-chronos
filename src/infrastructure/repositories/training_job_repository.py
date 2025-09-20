@@ -152,22 +152,6 @@ class TrainingJobRepository(ITrainingJobRepository):
             )
             raise e
 
-    async def list_all(self, skip: int = 0, limit: int = 100) -> List[TrainingJob]:
-        """List all training jobs with pagination."""
-        try:
-            collection = self.database.get_collection(self.collection_name)
-
-            cursor = collection.find().sort("created_at", -1).skip(skip).limit(limit)
-            documents = list(cursor)
-
-            return [self._from_document(doc) for doc in documents]
-
-        except PyMongoError as e:
-            logger.error(
-                "Failed to list training jobs", skip=skip, limit=limit, error=str(e)
-            )
-            raise e
-
     async def add_data_collection_job(
         self, training_job_id: UUID, job: DataCollectionJob
     ) -> bool:

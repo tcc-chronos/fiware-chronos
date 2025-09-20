@@ -64,7 +64,7 @@ class TrainingJobDTO(BaseModel):
     last_n: int
 
     # Progress tracking
-    data_collection_jobs: List[DataCollectionJobDTO]
+    data_collection_jobs: List["DataCollectionJobDTO"]
     total_data_points_requested: int
     total_data_points_collected: int
     data_collection_progress: float

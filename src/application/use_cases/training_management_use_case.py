@@ -47,6 +47,7 @@ class TrainingManagementUseCase:
         Args:
             training_job_repository: Repository for training jobs
             model_repository: Repository for models
+            artifacts_repository: Repository for stored model artifacts
         """
         self.training_job_repository = training_job_repository
         self.model_repository = model_repository
@@ -164,11 +165,14 @@ class TrainingManagementUseCase:
                 raise e
             raise TrainingManagementError(f"Failed to start training: {str(e)}") from e
 
-    async def get_training_job(self, training_job_id: UUID) -> Optional[TrainingJobDTO]:
+    async def get_training_job(
+        self, model_id: UUID, training_job_id: UUID
+    ) -> Optional[TrainingJobDTO]:
         """
         Get detailed information about a training job.
 
         Args:
+            model_id: ID of the model the training job should belong to
             training_job_id: ID of the training job
 
         Returns:
@@ -177,7 +181,7 @@ class TrainingManagementUseCase:
         try:
             training_job = await self.training_job_repository.get_by_id(training_job_id)
 
-            if not training_job:
+            if not training_job or training_job.model_id != model_id:
                 return None
 
             return self._to_training_job_dto(training_job)
@@ -185,6 +189,7 @@ class TrainingManagementUseCase:
         except Exception as e:
             logger.error(
                 "Failed to get training job",
+                model_id=str(model_id),
                 training_job_id=str(training_job_id),
                 error=str(e),
             )
@@ -192,51 +197,38 @@ class TrainingManagementUseCase:
                 f"Failed to get training job: {str(e)}"
             ) from e
 
-    async def list_training_jobs(
-        self, model_id: Optional[UUID] = None, skip: int = 0, limit: int = 100
+    async def list_training_jobs_by_model(
+        self, model_id: UUID, skip: int = 0, limit: int = 100
     ) -> List[TrainingJobSummaryDTO]:
-        """
-        List training jobs with optional filtering by model.
-
-        Args:
-            model_id: Optional model ID to filter by
-            skip: Number of records to skip
-            limit: Maximum number of records to return
-
-        Returns:
-            List of training job summaries
-        """
+        """List training jobs for a specific model."""
         try:
-            if model_id:
-                training_jobs = await self.training_job_repository.get_by_model_id(
-                    model_id
-                )
-                # Apply pagination manually for model-specific results
-                training_jobs = training_jobs[skip : skip + limit]
-            else:
-                training_jobs = await self.training_job_repository.list_all(skip, limit)
+            training_jobs = await self.training_job_repository.get_by_model_id(model_id)
+
+            # Apply pagination manually since repository returns full list
+            training_jobs = training_jobs[skip : skip + limit]
 
             return [self._to_training_job_summary_dto(job) for job in training_jobs]
 
         except Exception as e:
             logger.error(
-                "Failed to list training jobs",
-                model_id=str(model_id) if model_id else None,
+                "Failed to list training jobs for model",
+                model_id=str(model_id),
                 error=str(e),
             )
             raise TrainingManagementError(
                 f"Failed to list training jobs: {str(e)}"
             ) from e
 
-    async def cancel_training_job(self, training_job_id: UUID) -> bool:
+    async def cancel_training_job(self, model_id: UUID, training_job_id: UUID) -> bool:
         """
         Cancel a running training job.
 
         Args:
+            model_id: ID of the model the training job should belong to
             training_job_id: ID of the training job to cancel
 
         Returns:
-            True if cancelled successfully
+            True if cancelled successfully, False if the job is not found for the model
 
         Raises:
             TrainingManagementError: When job cannot be cancelled
@@ -244,10 +236,13 @@ class TrainingManagementUseCase:
         try:
             training_job = await self.training_job_repository.get_by_id(training_job_id)
 
-            if not training_job:
-                raise TrainingManagementError(
-                    f"Training job {training_job_id} not found"
+            if not training_job or training_job.model_id != model_id:
+                logger.warning(
+                    "Training job not found for cancellation",
+                    training_job_id=str(training_job_id),
+                    model_id=str(model_id),
                 )
+                return False
 
             # Check if job can be cancelled
             if training_job.status in [
@@ -275,6 +270,7 @@ class TrainingManagementUseCase:
         except Exception as e:
             logger.error(
                 "Failed to cancel training job",
+                model_id=str(model_id),
                 training_job_id=str(training_job_id),
                 error=str(e),
             )
@@ -284,15 +280,17 @@ class TrainingManagementUseCase:
                 f"Failed to cancel training job: {str(e)}"
             ) from e
 
-    async def delete_training_job(self, training_job_id: UUID) -> bool:
+    async def delete_training_job(self, model_id: UUID, training_job_id: UUID) -> bool:
         """
         Delete a training job and its generated artifacts.
 
         Args:
+            model_id: ID of the model the training job should belong to
             training_job_id: ID of the training job to delete
 
         Returns:
-            True when the training job is deleted successfully.
+            True when the training job is deleted successfully, False when the
+            training job is not found for the requested model.
 
         Raises:
             TrainingManagementError: When the job cannot be deleted
@@ -300,10 +298,11 @@ class TrainingManagementUseCase:
         try:
             training_job = await self.training_job_repository.get_by_id(training_job_id)
 
-            if not training_job:
+            if not training_job or training_job.model_id != model_id:
                 logger.warning(
                     "Training job not found for deletion",
                     training_job_id=str(training_job_id),
+                    model_id=str(model_id),
                 )
                 return False
 
@@ -314,8 +313,8 @@ class TrainingManagementUseCase:
                 TrainingStatus.TRAINING,
             ]:
                 raise TrainingManagementError(
-                    f"Training job {training_job_id} is still running. "
-                    f" Cancel it before deleting."
+                    f"Training job {training_job_id} for model {model_id} "
+                    "is still running. Cancel it before deleting."
                 )
 
             artifact_ids = [
@@ -374,6 +373,7 @@ class TrainingManagementUseCase:
         except Exception as e:
             logger.error(
                 "Failed to delete training job",
+                model_id=str(model_id),
                 training_job_id=str(training_job_id),
                 error=str(e),
             )
