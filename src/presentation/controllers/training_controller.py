@@ -25,7 +25,7 @@ from src.main.container import AppContainer
 
 logger = structlog.get_logger(__name__)
 
-router = APIRouter(prefix="/models", tags=["training"])
+router = APIRouter(prefix="/models", tags=["Training"])
 
 
 @router.get(
