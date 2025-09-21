@@ -18,7 +18,11 @@ from src.application.dtos.training_dto import (
     TrainingMetricsDTO,
     TrainingRequestDTO,
 )
-from src.domain.entities.training_job import TrainingJob, TrainingStatus
+from src.domain.entities.training_job import (
+    DataCollectionStatus,
+    TrainingJob,
+    TrainingStatus,
+)
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
@@ -96,6 +100,7 @@ class TrainingManagementUseCase:
                 if job.status
                 in [
                     TrainingStatus.PENDING,
+                    TrainingStatus.CANCEL_REQUESTED,
                     TrainingStatus.COLLECTING_DATA,
                     TrainingStatus.PREPROCESSING,
                     TrainingStatus.TRAINING,
@@ -138,6 +143,11 @@ class TrainingManagementUseCase:
                     "last_n": request.last_n,
                 },
                 queue="orchestration",
+            )
+
+            await self.training_job_repository.update_task_refs(
+                created_job.id,
+                task_refs={"orchestration_task_id": result.id},
             )
 
             logger.info(
@@ -244,7 +254,6 @@ class TrainingManagementUseCase:
                 )
                 return False
 
-            # Check if job can be cancelled
             if training_job.status in [
                 TrainingStatus.COMPLETED,
                 TrainingStatus.FAILED,
@@ -255,13 +264,99 @@ class TrainingManagementUseCase:
                     f"{training_job.status.value}"
                 )
 
-            # Update job status to cancelled
-            await self.training_job_repository.update_training_job_status(
-                training_job_id, TrainingStatus.CANCELLED
+            from src.infrastructure.services.celery_config import celery_app
+
+            if training_job.status != TrainingStatus.CANCEL_REQUESTED:
+                await self.training_job_repository.update_training_job_status(
+                    training_job_id, TrainingStatus.CANCEL_REQUESTED
+                )
+                training_job.status = TrainingStatus.CANCEL_REQUESTED
+
+            task_refs = training_job.task_refs or {}
+            revoke_ids = {
+                str(task_id)
+                for task_id in (
+                    task_refs.get("orchestration_task_id"),
+                    task_refs.get("chord_callback_id"),
+                    task_refs.get("chord_group_id"),
+                    task_refs.get("processing_task_id"),
+                    task_refs.get("training_task_id"),
+                )
+                if task_id
+            }
+
+            data_collection_ids = task_refs.get("data_collection_task_ids") or []
+            revoke_ids.update(
+                str(task_id) for task_id in data_collection_ids if task_id
             )
 
-            # TODO: Cancel Celery tasks if possible
-            # This would require storing task IDs and implementing task cancellation
+            if revoke_ids:
+                logger.info(
+                    "Revoking Celery tasks for cancellation",
+                    training_job_id=str(training_job_id),
+                    task_count=len(revoke_ids),
+                )
+                for task_id in revoke_ids:
+                    try:
+                        celery_app.control.revoke(
+                            task_id,
+                            terminate=True,
+                            signal="SIGTERM",
+                        )
+                    except (
+                        Exception
+                    ) as revoke_error:  # pragma: no cover - best effort only
+                        logger.warning(
+                            "Failed to revoke task",
+                            training_job_id=str(training_job_id),
+                            task_id=task_id,
+                            error=str(revoke_error),
+                        )
+
+            now = datetime.now(timezone.utc)
+
+            # Update outstanding collection jobs to cancelled
+            for job in training_job.data_collection_jobs:
+                if job.status in (
+                    DataCollectionStatus.PENDING,
+                    DataCollectionStatus.IN_PROGRESS,
+                ):
+                    await self.training_job_repository.update_data_collection_job_status(  # noqa: E501
+                        training_job_id,
+                        job.id,
+                        DataCollectionStatus.CANCELLED,
+                        end_time=now,
+                        error="Cancelled by user request",
+                    )
+
+            data_collection_end = training_job.data_collection_end
+            if not data_collection_end and training_job.data_collection_start:
+                data_collection_end = now
+
+            preprocessing_end = training_job.preprocessing_end
+            if not preprocessing_end and training_job.preprocessing_start:
+                preprocessing_end = now
+
+            training_end = training_job.training_end
+            if not training_end and training_job.training_start:
+                training_end = now
+
+            await self.training_job_repository.update_training_job_status(
+                training_job_id,
+                TrainingStatus.CANCELLED,
+                data_collection_end=data_collection_end,
+                preprocessing_end=preprocessing_end,
+                training_end=training_end,
+                total_data_points_collected=training_job.total_data_points_collected,
+                end_time=now,
+            )
+
+            celery_app.send_task(
+                "cleanup_training_tasks",
+                args=[str(training_job_id)],
+                queue="orchestration",
+                countdown=60,
+            )
 
             logger.info("Training job cancelled", training_job_id=str(training_job_id))
 
@@ -308,6 +403,7 @@ class TrainingManagementUseCase:
 
             if training_job.status in [
                 TrainingStatus.PENDING,
+                TrainingStatus.CANCEL_REQUESTED,
                 TrainingStatus.COLLECTING_DATA,
                 TrainingStatus.PREPROCESSING,
                 TrainingStatus.TRAINING,

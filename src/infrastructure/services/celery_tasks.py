@@ -126,6 +126,40 @@ def collect_data_chunk(
         training_job_repo = TrainingJobRepository(database)
         sth_gateway = STHCometGateway(settings.fiware.sth_url)
 
+        training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if training_job and training_job.status in (
+            TrainingStatus.CANCELLED,
+            TrainingStatus.CANCEL_REQUESTED,
+        ):
+            logger.info(
+                "Skipping data collection chunk due to cancellation",
+                training_job_id=training_job_id,
+                job_id=job_id,
+            )
+            asyncio.run(
+                training_job_repo.update_data_collection_job_status(
+                    UUID(training_job_id),
+                    UUID(job_id),
+                    DataCollectionStatus.CANCELLED,
+                    end_time=datetime.now(timezone.utc),
+                    error="Cancelled by user request",
+                )
+            )
+            return {
+                "job_id": job_id,
+                "training_job_id": training_job_id,
+                "status": "cancelled",
+                "data_points_collected": 0,
+                "data_points": [],
+                "h_offset": h_offset,
+                "chunk_info": {
+                    "requested_h_limit": h_limit,
+                    "actual_collected": 0,
+                    "h_offset": h_offset,
+                },
+                "message": "Chunk cancelled before execution.",
+            }
+
         # Update job status to in progress
         asyncio.run(
             training_job_repo.update_data_collection_job_status(
@@ -162,11 +196,23 @@ def collect_data_chunk(
 
         # Evitar atualização se job foi cancelado
         job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
-        if job and job.status == TrainingStatus.CANCELLED:
+        if job and job.status in (
+            TrainingStatus.CANCELLED,
+            TrainingStatus.CANCEL_REQUESTED,
+        ):
             logger.info(
                 "Job was cancelled, skipping final update",
                 training_job_id=training_job_id,
                 job_id=job_id,
+            )
+            asyncio.run(
+                training_job_repo.update_data_collection_job_status(
+                    UUID(training_job_id),
+                    UUID(job_id),
+                    DataCollectionStatus.CANCELLED,
+                    end_time=datetime.now(timezone.utc),
+                    error="Cancelled by user request",
+                )
             )
             return {
                 "job_id": job_id,
@@ -350,6 +396,28 @@ def train_model_task(
 
         model_training = ModelTrainingUseCase(artifacts_repository=artifacts_repo)
 
+        existing_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if existing_job and existing_job.status in (
+            TrainingStatus.CANCELLED,
+            TrainingStatus.CANCEL_REQUESTED,
+        ):
+            logger.info(
+                "Training job already cancelled before model training",
+                training_job_id=training_job_id,
+            )
+            return {
+                "training_job_id": training_job_id,
+                "status": "cancelled",
+                "message": "Job was cancelled before training started.",
+            }
+
+        asyncio.run(
+            training_job_repo.update_task_refs(
+                UUID(training_job_id),
+                task_refs={"training_task_id": self.request.id},
+            )
+        )
+
         # Update training job status
         asyncio.run(
             training_job_repo.update_training_job_status(
@@ -426,7 +494,10 @@ def train_model_task(
 
         # Evitar atualização se job foi cancelado
         job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
-        if job and job.status == TrainingStatus.CANCELLED:
+        if job and job.status in (
+            TrainingStatus.CANCELLED,
+            TrainingStatus.CANCEL_REQUESTED,
+        ):
             logger.info(
                 "Job was cancelled, skipping final update",
                 training_job_id=training_job_id,
@@ -446,6 +517,9 @@ def train_model_task(
                     y_scaler_artifact_id=y_scaler_artifact_id,
                     metadata_artifact_id=metadata_artifact_id,
                 )
+            )
+            asyncio.run(
+                training_job_repo.update_task_refs(UUID(training_job_id), clear=True)
             )
 
         logger.info(
@@ -495,6 +569,9 @@ def train_model_task(
                         "retries": self.request.retries,
                     },
                 )
+            )
+            asyncio.run(
+                training_job_repo.update_task_refs(UUID(training_job_id), clear=True)
             )
         except Exception as update_error:
             logger.error(
@@ -671,6 +748,13 @@ def orchestrate_training(
                 training_job_repo.add_data_collection_job(UUID(training_job_id), job)
             )
 
+        asyncio.run(
+            training_job_repo.update_task_refs(
+                UUID(training_job_id),
+                task_refs={"orchestration_task_id": self.request.id},
+            )
+        )
+
         logger.info(
             "Created data collection strategy",
             training_job_id=training_job_id,
@@ -693,7 +777,7 @@ def orchestrate_training(
                     attribute=model.feature,
                     h_limit=job.last_n,  # last_n stores the chunk size (h_limit)
                     h_offset=job.h_offset,
-                ).set(queue="data_collection")
+                ).set(queue="data_collection", task_id=str(job.id))
                 for job in collection_jobs
             ]
         )
@@ -707,6 +791,8 @@ def orchestrate_training(
 
         # Use chord to schedule after all data_collection_tasks finish
         from celery import chord
+
+        process_task_id = f"{training_job_id}:process"
 
         chord_result = chord(
             data_collection_tasks,
@@ -731,7 +817,22 @@ def orchestrate_training(
                 window_size=window_size,
                 last_n=last_n,
             ),
-        ).apply_async(queue="orchestration")
+        ).apply_async(queue="orchestration", task_id=process_task_id)
+
+        chord_group_id = getattr(chord_result.parent, "id", None)
+        task_ref_payload = {
+            "processing_task_id": process_task_id,
+            "chord_callback_id": chord_result.id,
+        }
+        if chord_group_id:
+            task_ref_payload["chord_group_id"] = chord_group_id
+
+        asyncio.run(
+            training_job_repo.update_task_refs(
+                UUID(training_job_id),
+                task_refs=task_ref_payload,
+            )
+        )
 
         logger.info(
             "celery.orchestration.started",
@@ -830,6 +931,28 @@ def process_collected_data(
         )
         training_job_repo = TrainingJobRepository(database)
 
+        training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if training_job and training_job.status in (
+            TrainingStatus.CANCELLED,
+            TrainingStatus.CANCEL_REQUESTED,
+        ):
+            logger.info(
+                "Skipping data processing because training job was cancelled",
+                training_job_id=training_job_id,
+            )
+            return {
+                "training_job_id": training_job_id,
+                "status": "cancelled",
+                "message": "Job was cancelled before processing.",
+            }
+
+        asyncio.run(
+            training_job_repo.update_task_refs(
+                UUID(training_job_id),
+                task_refs={"processing_task_id": self.request.id},
+            )
+        )
+
         logger.info(
             "Processing collected data results",
             training_job_id=training_job_id,
@@ -883,7 +1006,10 @@ def process_collected_data(
 
         # Check if job was cancelled
         training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
-        if training_job and training_job.status == TrainingStatus.CANCELLED:
+        if training_job and training_job.status in (
+            TrainingStatus.CANCELLED,
+            TrainingStatus.CANCEL_REQUESTED,
+        ):
             logger.info(
                 "Job was cancelled, skipping training",
                 training_job_id=training_job_id,
@@ -910,6 +1036,7 @@ def process_collected_data(
             "celery.data_processing.training_dispatch",
             training_job_id=training_job_id,
         )
+        training_task_id = f"{training_job_id}:train"
         training_task = (
             train_model_task.s(
                 training_job_id=training_job_id,
@@ -918,7 +1045,14 @@ def process_collected_data(
                 window_size=window_size,
             )
             .set(queue="model_training")
-            .apply_async()
+            .apply_async(task_id=training_task_id)
+        )
+
+        asyncio.run(
+            training_job_repo.update_task_refs(
+                UUID(training_job_id),
+                task_refs={"training_task_id": training_task.id},
+            )
         )
 
         logger.info(
@@ -968,10 +1102,89 @@ def process_collected_data(
         raise exc
 
 
+@celery_app.task(name="cleanup_training_tasks")
+def cleanup_training_tasks(training_job_id: str) -> None:
+    """Best-effort cleanup of lingering Celery tasks for a training job."""
+
+    try:
+        from src.infrastructure.database.mongo_database import MongoDatabase
+        from src.infrastructure.repositories.training_job_repository import (
+            TrainingJobRepository,
+        )
+        from src.main.config import get_settings
+
+        settings = get_settings()
+        database = MongoDatabase(
+            mongo_uri=settings.database.mongo_uri,
+            db_name=settings.database.database_name,
+        )
+        training_job_repo = TrainingJobRepository(database)
+
+        training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+
+        if not training_job:
+            return
+
+        if training_job.status not in {
+            TrainingStatus.CANCELLED,
+            TrainingStatus.COMPLETED,
+            TrainingStatus.FAILED,
+        }:
+            return
+
+        task_refs = training_job.task_refs or {}
+        residual_ids = {
+            str(task_id)
+            for task_id in (
+                task_refs.get("orchestration_task_id"),
+                task_refs.get("chord_callback_id"),
+                task_refs.get("chord_group_id"),
+                task_refs.get("processing_task_id"),
+                task_refs.get("training_task_id"),
+            )
+            if task_id
+        }
+        residual_ids.update(
+            str(task_id)
+            for task_id in task_refs.get("data_collection_task_ids", [])
+            if task_id
+        )
+
+        if residual_ids:
+            logger.info(
+                "Cleaning up lingering tasks",
+                training_job_id=training_job_id,
+                task_count=len(residual_ids),
+            )
+            for task_id in residual_ids:
+                try:
+                    celery_app.control.revoke(task_id, terminate=False)
+                except Exception as revoke_error:  # pragma: no cover - best effort only
+                    logger.warning(
+                        "Failed to revoke lingering task",
+                        training_job_id=training_job_id,
+                        task_id=task_id,
+                        error=str(revoke_error),
+                    )
+
+        if task_refs:
+            asyncio.run(
+                training_job_repo.update_task_refs(UUID(training_job_id), clear=True)
+            )
+
+    except Exception as exc:  # pragma: no cover - cleanup is best effort
+        logger.warning(
+            "Cleanup routine failed",
+            training_job_id=training_job_id,
+            error=str(exc),
+        )
+
+
 # Ensure tasks are registered with the Celery app
 __all__ = [
     "collect_data_chunk",
     "train_model_task",
     "orchestrate_training",
     "process_collected_data",
+    "cleanup_training_tasks",
 ]

@@ -79,6 +79,7 @@ class ITrainingJobRepository(ABC):
         training_start: Optional[datetime] = None,
         training_end: Optional[datetime] = None,
         total_data_points_collected: Optional[int] = None,
+        end_time: Optional[datetime] = None,
     ) -> bool:
         """Update the status and timestamps of a training job."""
         pass
@@ -101,4 +102,16 @@ class ITrainingJobRepository(ABC):
         self, training_job_id: UUID, error: str, error_details: Optional[dict] = None
     ) -> bool:
         """Mark a training job as failed."""
+        pass
+
+    @abstractmethod
+    async def update_task_refs(
+        self,
+        training_job_id: UUID,
+        *,
+        task_refs: Optional[dict] = None,
+        add_data_collection_ids: Optional[List[str]] = None,
+        clear: bool = False,
+    ) -> bool:
+        """Update task reference metadata for a training job."""
         pass

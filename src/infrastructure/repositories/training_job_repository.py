@@ -5,7 +5,7 @@ This module implements the training job repository using MongoDB.
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 import structlog
@@ -176,6 +176,7 @@ class TrainingJobRepository(ITrainingJobRepository):
                 {"id": str(training_job_id)},
                 {
                     "$push": {"data_collection_jobs": job_doc},
+                    "$addToSet": {"task_refs.data_collection_task_ids": str(job.id)},
                     "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
                 },
             )
@@ -252,6 +253,7 @@ class TrainingJobRepository(ITrainingJobRepository):
         training_start: Optional[datetime] = None,
         training_end: Optional[datetime] = None,
         total_data_points_collected: Optional[int] = None,
+        end_time: Optional[datetime] = None,
     ) -> bool:
         """Update the status and timestamps of a training job."""
         try:
@@ -281,6 +283,8 @@ class TrainingJobRepository(ITrainingJobRepository):
                 update_fields["total_data_points_collected"] = str(
                     total_data_points_collected
                 )
+            if end_time:
+                update_fields["end_time"] = end_time.isoformat()
 
             # Update document
             result = collection.update_one(
@@ -351,6 +355,52 @@ class TrainingJobRepository(ITrainingJobRepository):
             )
             raise e
 
+    async def update_task_refs(
+        self,
+        training_job_id: UUID,
+        *,
+        task_refs: Optional[dict] = None,
+        add_data_collection_ids: Optional[List[str]] = None,
+        clear: bool = False,
+    ) -> bool:
+        """Update task reference metadata for a training job."""
+
+        if not task_refs and not add_data_collection_ids and not clear:
+            return False
+
+        try:
+            collection = self.database.get_collection(self.collection_name)
+
+            update_operations: dict[str, Any] = {
+                "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+            }
+
+            if clear:
+                update_operations["$set"]["task_refs"] = {}
+
+            if task_refs:
+                for key, value in task_refs.items():
+                    update_operations["$set"][f"task_refs.{key}"] = value
+
+            if add_data_collection_ids:
+                update_operations.setdefault("$addToSet", {})[
+                    "task_refs.data_collection_task_ids"
+                ] = {"$each": add_data_collection_ids}
+
+            result = collection.update_one(
+                {"id": str(training_job_id)}, update_operations
+            )
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(
+                "Failed to update task references",
+                training_job_id=str(training_job_id),
+                error=str(e),
+            )
+            raise e
+
     async def fail_training_job(
         self, training_job_id: UUID, error: str, error_details: Optional[dict] = None
     ) -> bool:
@@ -416,6 +466,9 @@ class TrainingJobRepository(ITrainingJobRepository):
                 "best_epoch": training_job.metrics.best_epoch,
             }
 
+        task_refs = dict(training_job.task_refs or {})
+        task_refs.setdefault("data_collection_task_ids", [])
+
         return {
             "id": str(training_job.id),
             "model_id": str(training_job.model_id) if training_job.model_id else None,
@@ -424,6 +477,7 @@ class TrainingJobRepository(ITrainingJobRepository):
             "data_collection_jobs": data_collection_jobs,
             "total_data_points_requested": training_job.total_data_points_requested,
             "total_data_points_collected": training_job.total_data_points_collected,
+            "task_refs": task_refs,
             "start_time": (
                 training_job.start_time.isoformat() if training_job.start_time else None
             ),
@@ -544,6 +598,7 @@ class TrainingJobRepository(ITrainingJobRepository):
             data_collection_jobs=data_collection_jobs,
             total_data_points_requested=total_requested,
             total_data_points_collected=total_collected,
+            task_refs=document.get("task_refs") or {},
             start_time=(
                 datetime.fromisoformat(document["start_time"])
                 if document.get("start_time")

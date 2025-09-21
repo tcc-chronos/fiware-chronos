@@ -17,6 +17,7 @@ class TrainingStatus(str, Enum):
     """Status of a training job."""
 
     PENDING = "pending"
+    CANCEL_REQUESTED = "cancel_requested"
     COLLECTING_DATA = "collecting_data"
     PREPROCESSING = "preprocessing"
     TRAINING = "training"
@@ -32,6 +33,7 @@ class DataCollectionStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -79,6 +81,7 @@ class TrainingJob:
     data_collection_jobs: List[DataCollectionJob] = field(default_factory=list)
     total_data_points_requested: int = 0
     total_data_points_collected: int = 0
+    task_refs: Dict[str, Any] = field(default_factory=dict)
 
     # Training process
     start_time: Optional[datetime] = None
