@@ -493,9 +493,31 @@ class TrainingJobRepository(ITrainingJobRepository):
                     else None
                 ),
                 error=job_doc.get("error"),
-                data_points_collected=job_doc.get("data_points_collected", 0),
+                data_points_collected=int(job_doc.get("data_points_collected", 0) or 0),
             )
             data_collection_jobs.append(job)
+
+        collected_from_jobs = sum(
+            job.data_points_collected for job in data_collection_jobs
+        )
+
+        raw_total_collected = document.get("total_data_points_collected", 0)
+        try:
+            stored_total_collected = int(raw_total_collected)
+        except (TypeError, ValueError):
+            stored_total_collected = 0
+
+        total_collected = (
+            stored_total_collected
+            if stored_total_collected >= collected_from_jobs
+            else collected_from_jobs
+        )
+
+        raw_total_requested = document.get("total_data_points_requested", 0)
+        try:
+            total_requested = int(raw_total_requested)
+        except (TypeError, ValueError):
+            total_requested = 0
 
         # Convert metrics
         metrics = None
@@ -520,8 +542,8 @@ class TrainingJobRepository(ITrainingJobRepository):
             status=TrainingStatus(document["status"]),
             last_n=document["last_n"],
             data_collection_jobs=data_collection_jobs,
-            total_data_points_requested=document.get("total_data_points_requested", 0),
-            total_data_points_collected=document.get("total_data_points_collected", 0),
+            total_data_points_requested=total_requested,
+            total_data_points_collected=total_collected,
             start_time=(
                 datetime.fromisoformat(document["start_time"])
                 if document.get("start_time")
