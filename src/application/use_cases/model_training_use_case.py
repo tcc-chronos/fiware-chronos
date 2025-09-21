@@ -200,7 +200,12 @@ class ModelTrainingUseCase:
             )
 
         except Exception as e:
-            logger.error(f"Model training failed: {str(e)}", error=str(e))
+            logger.error(
+                "model_training.execution_failed",
+                model_id=str(model_config.id),
+                error=str(e),
+                exc_info=e,
+            )
             raise ModelTrainingError(f"Model training failed: {str(e)}") from e
 
     def _validate_config(self, config: Model) -> None:

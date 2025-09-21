@@ -48,15 +48,20 @@ class CallbackTask(Task):
 
     def on_success(self, retval, task_id, args, kwargs):
         """Called on task success."""
-        logger.info(f"Task {task_id} succeeded", task_id=task_id, result=retval)
+        logger.info(
+            "celery.task.succeeded",
+            task_id=task_id,
+            result=retval,
+        )
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Called on task failure."""
         logger.error(
-            f"Task {task_id} failed",
+            "celery.task.failed",
             task_id=task_id,
             error=str(exc),
             traceback=einfo.traceback,
+            exc_info=exc,
         )
 
 
@@ -250,15 +255,23 @@ def collect_data_chunk(
                     error=str(exc),
                 )
             )
-        except Exception as e:
-            logger.error(f"Failed to update job status: {e}")
+        except Exception as update_error:
+            logger.error(
+                "celery.data_collection.status_update_failed",
+                job_id=job_id,
+                training_job_id=training_job_id,
+                error=str(update_error),
+                exc_info=update_error,
+            )
 
         # Retry the task with exponential backoff
         if self.request.retries < self.max_retries:
             retry_delay = min(60 * (2**self.request.retries), 300)  # Max 5 minutes
             logger.info(
-                f"Retrying data collection chunk {job_id} "
-                f"(attempt {self.request.retries + 1}) in {retry_delay}s"
+                "celery.data_collection.retry_scheduled",
+                job_id=job_id,
+                attempt=self.request.retries + 1,
+                delay_seconds=retry_delay,
             )
             raise self.retry(countdown=retry_delay, exc=exc)
 
@@ -436,7 +449,7 @@ def train_model_task(
             )
 
         logger.info(
-            "Model training completed successfully",
+            "celery.training.completed",
             training_job_id=training_job_id,
             metrics=metrics.__dict__,
         )
@@ -453,7 +466,10 @@ def train_model_task(
 
     except Exception as exc:
         logger.error(
-            "Model training failed", training_job_id=training_job_id, error=str(exc)
+            "celery.training.failed",
+            training_job_id=training_job_id,
+            error=str(exc),
+            exc_info=exc,
         )
 
         # Update job status to failed
@@ -480,14 +496,21 @@ def train_model_task(
                     },
                 )
             )
-        except Exception as e:
-            logger.error(f"Failed to update training job status: {e}")
+        except Exception as update_error:
+            logger.error(
+                "celery.training.status_update_failed",
+                training_job_id=training_job_id,
+                error=str(update_error),
+                exc_info=update_error,
+            )
 
         # Retry the task
         if self.request.retries < self.max_retries:
             logger.info(
-                f"Retrying model training {training_job_id} "
-                f"(attempt {self.request.retries + 1})"
+                "celery.training.retry_scheduled",
+                training_job_id=training_job_id,
+                attempt=self.request.retries + 1,
+                delay_seconds=300,
             )
             raise self.retry(
                 countdown=300, exc=exc
@@ -711,7 +734,7 @@ def orchestrate_training(
         ).apply_async(queue="orchestration")
 
         logger.info(
-            "Training orchestration initiated",
+            "celery.orchestration.started",
             training_job_id=training_job_id,
             collection_tasks=len(collection_jobs),
             chord_id=chord_result.id,
@@ -726,9 +749,10 @@ def orchestrate_training(
 
     except Exception as exc:
         logger.error(
-            "Training orchestration failed",
+            "celery.orchestration.failed",
             training_job_id=training_job_id,
             error=str(exc),
+            exc_info=exc,
         )
 
         # Update job status to failed
@@ -758,12 +782,17 @@ def orchestrate_training(
                     },
                 )
             )
-        except Exception as e:
-            logger.error(f"Failed to update training job status: {e}")
+        except Exception as update_error:
+            logger.error(
+                "celery.orchestration.status_update_failed",
+                training_job_id=training_job_id,
+                error=str(update_error),
+                exc_info=update_error,
+            )
 
         # Don't retry orchestration tasks as they are complex and expensive
         logger.error(
-            "Training orchestration failed - not retrying due to complexity",
+            "celery.orchestration.not_retrying",
             training_job_id=training_job_id,
             model_id=model_id,
             last_n=last_n,
@@ -877,7 +906,10 @@ def process_collected_data(
         )
 
         # Start model training task
-        logger.info("Starting model training with collected data")
+        logger.info(
+            "celery.data_processing.training_dispatch",
+            training_job_id=training_job_id,
+        )
         training_task = (
             train_model_task.s(
                 training_job_id=training_job_id,
@@ -890,7 +922,7 @@ def process_collected_data(
         )
 
         logger.info(
-            "Data processing completed, training started",
+            "celery.data_processing.completed",
             training_job_id=training_job_id,
             total_data_points=len(all_data_points),
             training_task_id=training_task.id,
@@ -907,9 +939,10 @@ def process_collected_data(
 
     except Exception as exc:
         logger.error(
-            "Data processing failed",
+            "celery.data_processing.failed",
             training_job_id=training_job_id,
             error=str(exc),
+            exc_info=exc,
         )
 
         try:
@@ -924,8 +957,13 @@ def process_collected_data(
                         },
                     )
                 )
-        except Exception as e:
-            logger.error(f"Failed to update training job status: {e}")
+        except Exception as update_error:
+            logger.error(
+                "celery.data_processing.status_update_failed",
+                training_job_id=training_job_id,
+                error=str(update_error),
+                exc_info=update_error,
+            )
 
         raise exc
 

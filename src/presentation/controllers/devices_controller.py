@@ -4,14 +4,14 @@ Devices Router - Presentation Layer
 This module defines the FastAPI router for device endpoints.
 """
 
-import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.application.dtos.device_dto import DevicesResponseDTO
 from src.application.use_cases.device_use_cases import GetDevicesUseCase
+from src.shared import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/devices", tags=["Devices"])
 
@@ -44,16 +44,31 @@ async def get_devices(
     Raises:
         HTTPException: If devices cannot be retrieved from IoT Agent
     """
-    logger.info(f"GET /devices - service: {service}, service_path: {service_path}")
+    logger.info(
+        "devices.requested",
+        service=service,
+        service_path=service_path,
+    )
 
     try:
         devices_response = await get_devices_use_case.execute(service, service_path)
 
-        logger.info(f"Successfully retrieved {len(devices_response.devices)} devices")
+        logger.info(
+            "devices.retrieved",
+            device_count=len(devices_response.devices),
+            service=service,
+            service_path=service_path,
+        )
         return devices_response
 
     except Exception as e:
-        logger.error(f"Error retrieving devices: {str(e)}")
+        logger.error(
+            "devices.retrieval_failed",
+            service=service,
+            service_path=service_path,
+            error=str(e),
+            exc_info=e,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve devices from IoT Agent: {str(e)}",

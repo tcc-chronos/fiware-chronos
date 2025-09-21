@@ -6,7 +6,6 @@ to simplify the management and lifecycle of dependencies
 in the application.
 """
 
-import logging
 from contextlib import asynccontextmanager
 
 from dependency_injector import containers, providers
@@ -33,10 +32,11 @@ from src.infrastructure.repositories.model_repository import ModelRepository
 from src.infrastructure.repositories.training_job_repository import (
     TrainingJobRepository,
 )
+from src.shared import get_logger
 
 from .config import AppSettings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AppContainer(containers.DeclarativeContainer):
@@ -185,7 +185,7 @@ async def app_lifespan():
 
     try:
         # Startup - MongoDB is already connected in __init__
-        logger.info("Ensuring MongoDB connection is established")
+        logger.info("container.mongo.ensure_connection")
         # Create necessary indexes
         await mongo_database.create_indexes()
 
@@ -195,12 +195,12 @@ async def app_lifespan():
         # if broker_client and hasattr(broker_client, "start"):
         #     await broker_client.start()
 
-        logger.info("Application container resources initialized successfully")
+        logger.info("container.resources.initialized")
         yield container
 
     finally:
         # Shutdown - Clean up resources
-        logger.info("Closing MongoDB connection")
+        logger.info("container.mongo.close")
         mongo_database.close()
 
         # Future Redis/Broker cleanup
@@ -209,4 +209,4 @@ async def app_lifespan():
         # if broker_client and hasattr(broker_client, "stop"):
         #     await broker_client.stop()
 
-        logger.info("Application container resources shutdown successfully")
+        logger.info("container.resources.shutdown")

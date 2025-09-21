@@ -4,69 +4,17 @@ Logging Configuration - Shared Layer
 This module provides utilities for configuring logging across the application.
 """
 
-import json
 import logging
 import os
 import sys
 from typing import Any, Dict, List, Optional
 
+import structlog
+from structlog.types import Processor
+
 from src.shared.consts import EnumEnvironment
 
-
-class JsonFormatter(logging.Formatter):
-    """JSON formatter for logging."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format log record as JSON."""
-        # ISO format timestamp with timezone
-        import datetime
-
-        timestamp = datetime.datetime.fromtimestamp(
-            record.created, datetime.timezone.utc
-        ).isoformat()
-
-        log_data = {
-            "timestamp": timestamp,
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-            "app": "fiware-chronos",
-        }
-
-        # Add exception info if present
-        if record.exc_info:
-            log_data["exc_info"] = self.formatException(record.exc_info)
-
-        # Add any extra attributes
-        for key, value in record.__dict__.items():
-            if key not in {
-                "args",
-                "asctime",
-                "created",
-                "exc_info",
-                "exc_text",
-                "filename",
-                "funcName",
-                "id",
-                "levelname",
-                "levelno",
-                "lineno",
-                "module",
-                "msecs",
-                "message",
-                "msg",
-                "name",
-                "pathname",
-                "process",
-                "processName",
-                "relativeCreated",
-                "stack_info",
-                "thread",
-                "threadName",
-            }:
-                log_data[key] = value
-
-        return json.dumps(log_data)
+DEFAULT_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
 def _get_log_config_from_env() -> Dict[str, Optional[str]]:
@@ -81,9 +29,7 @@ def _get_log_config_from_env() -> Dict[str, Optional[str]]:
     """
     return {
         "level": os.environ.get("LOG_LEVEL", "INFO"),
-        "format": os.environ.get(
-            "LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        ),
+        "format": os.environ.get("LOG_FORMAT", DEFAULT_LOG_FORMAT),
         "file_path": os.environ.get("LOG_FILE_PATH"),
     }
 
@@ -111,11 +57,6 @@ def configure_logging(
 
     # Use parameters, env vars, or defaults
     log_level = level or env_config["level"] or "INFO"
-    log_format = (
-        format_string
-        or env_config["format"]
-        or "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
     log_file = file_path or env_config["file_path"]
 
     # Convert string level to logging level
@@ -138,19 +79,48 @@ def configure_logging(
         file_handler = logging.FileHandler(log_file)
         handlers.append(file_handler)
 
-    # Configure formatters based on environment
-    if environment.lower() == EnumEnvironment.PRODUCTION:
-        # Use JSON formatter in production environment
-        json_formatter = JsonFormatter()
-        # Apply JSON formatter to all handlers
-        for handler in handlers:
-            handler.setFormatter(json_formatter)
+    env_value = environment.lower()
+    is_production = env_value == EnumEnvironment.PRODUCTION
+
+    timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
+    renderer: Processor
+    if is_production:
+        renderer = structlog.processors.JSONRenderer()
     else:
-        # Use standard formatter for other environments
-        std_formatter = logging.Formatter(log_format)
-        # Apply standard formatter to all handlers
-        for handler in handlers:
-            handler.setFormatter(std_formatter)
+        renderer = structlog.dev.ConsoleRenderer()
+
+    formatter = structlog.stdlib.ProcessorFormatter(
+        processor=renderer,
+        foreign_pre_chain=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            timestamper,
+        ],
+    )
+
+    for handler in handlers:
+        handler.setFormatter(formatter)
+
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            timestamper,
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
 
     # Configure root logger
     root_logger.handlers = handlers
@@ -160,54 +130,6 @@ def configure_logging(
     logging.info(f"Logging configured with level: {log_level}")
     if log_file:
         logging.info(f"Logging to file: {log_file}")
-
-
-class StructuredLogger:
-    """
-    Simple structured logger that adds context to logs.
-    This provides a simple alternative to structlog with similar API.
-    """
-
-    def __init__(self, name: str):
-        self.logger = logging.getLogger(name)
-        self.default_context = {"logger": name}
-
-    def _log(self, level: int, event: str, **kwargs: Any) -> None:
-        """Log with context."""
-        # Create copy of default context and update with kwargs
-        context = self.default_context.copy()
-        context.update(kwargs)
-        context["event"] = event
-
-        # Log with extra context
-        self.logger.log(level, event, extra=context)
-
-    def debug(self, event: str, **kwargs: Any) -> None:
-        """Log debug message with context."""
-        self._log(logging.DEBUG, event, **kwargs)
-
-    def info(self, event: str, **kwargs: Any) -> None:
-        """Log info message with context."""
-        self._log(logging.INFO, event, **kwargs)
-
-    def warning(self, event: str, **kwargs: Any) -> None:
-        """Log warning message with context."""
-        self._log(logging.WARNING, event, **kwargs)
-
-    def error(self, event: str, **kwargs: Any) -> None:
-        """Log error message with context."""
-        self._log(logging.ERROR, event, **kwargs)
-
-    def critical(self, event: str, **kwargs: Any) -> None:
-        """Log critical message with context."""
-        self._log(logging.CRITICAL, event, **kwargs)
-
-    def bind(self, **kwargs: Any) -> "StructuredLogger":
-        """Create a new logger with additional default context."""
-        new_logger = StructuredLogger(self.logger.name)
-        new_logger.default_context = self.default_context.copy()
-        new_logger.default_context.update(kwargs)
-        return new_logger
 
 
 def update_logging_from_settings(settings: Any) -> None:
@@ -247,6 +169,6 @@ def update_logging_from_settings(settings: Any) -> None:
         logging.error(f"Failed to update logging from settings: {e}")
 
 
-def get_logger(name: str) -> StructuredLogger:
-    """Get a structured logger with the given name."""
-    return StructuredLogger(name)
+def get_logger(name: str) -> structlog.stdlib.BoundLogger:
+    """Get a structlog logger configured for the project."""
+    return structlog.get_logger(name)

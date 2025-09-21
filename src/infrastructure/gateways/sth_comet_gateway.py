@@ -217,7 +217,10 @@ class STHCometGateway(ISTHCometGateway):
                     break
 
             if not target_attribute:
-                logger.warning(f"Attribute '{attribute}' not found in response")
+                logger.warning(
+                    "sth_comet.attribute_not_found",
+                    attribute=attribute,
+                )
                 return []
 
             # Extract values
@@ -247,7 +250,11 @@ class STHCometGateway(ISTHCometGateway):
                     try:
                         value = float(attr_value)
                     except (ValueError, TypeError):
-                        logger.warning(f"Cannot convert value to float: {attr_value}")
+                        logger.warning(
+                            "sth_comet.value_conversion_failed",
+                            value=attr_value,
+                            attribute=attribute,
+                        )
                         continue
 
                     collected_data.append(
@@ -256,15 +263,23 @@ class STHCometGateway(ISTHCometGateway):
 
                 except Exception as e:
                     logger.warning(
-                        f"Error parsing value entry: {e}", value_entry=value_entry
+                        "sth_comet.value_entry_parse_failed",
+                        error=str(e),
+                        value_entry=value_entry,
                     )
                     continue
 
             logger.info(
-                f"Parsed {len(collected_data)} data points from STH-Comet response"
+                "sth_comet.data_points_parsed",
+                count=len(collected_data),
             )
             return collected_data
 
         except Exception as e:
-            logger.error(f"Error parsing STH-Comet response: {e}", response_data=data)
+            logger.error(
+                "sth_comet.response_parse_failed",
+                error=str(e),
+                response_data=data,
+                exc_info=e,
+            )
             raise STHCometError(f"Failed to parse STH-Comet response: {e}") from e

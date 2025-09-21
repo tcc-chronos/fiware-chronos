@@ -12,12 +12,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import Celery tasks to ensure they are registered
-from src.infrastructure.services import celery_tasks  # noqa: F401
 from src.main.config import get_settings
-from src.main.container import app_lifespan, init_container
-from src.presentation.controllers import devices_router, models_router
-from src.presentation.controllers.training_controller import router as training_router
 from src.shared import configure_logging, get_logger, update_logging_from_settings
 
 # Configure logging with basic settings first - before configuration is loaded
@@ -29,6 +24,15 @@ settings = get_settings()
 
 # Update logging with complete settings
 update_logging_from_settings(settings)
+
+from src.infrastructure.services import celery_tasks  # noqa: E402,F401
+
+# Import Celery tasks and routers after logging is configured
+from src.main.container import app_lifespan, init_container  # noqa: E402
+from src.presentation.controllers import devices_router, models_router  # noqa: E402
+from src.presentation.controllers.training_controller import (  # noqa: E402
+    router as training_router,
+)
 
 # Get structured logger
 logger = get_logger(__name__)

@@ -4,15 +4,14 @@ IoT Agent Gateway Implementation - Infrastructure Layer
 This module implements the gateway for communicating with the IoT Agent.
 """
 
-import logging
-
 import httpx
 from dependency_injector.wiring import inject
 
 from src.application.dtos.device_dto import IoTAgentDevicesResponseDTO
 from src.domain.gateways.iot_agent_gateway import IIoTAgentGateway
+from src.shared import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class IoTAgentGateway(IIoTAgentGateway):
@@ -53,8 +52,13 @@ class IoTAgentGateway(IIoTAgentGateway):
             "Content-Type": "application/json",
         }
 
-        logger.info(f"Requesting devices from IoT Agent: {url}")
-        logger.debug(f"Headers: {headers}")
+        logger.info(
+            "iot_agent.devices.request",
+            url=url,
+            service=service,
+            service_path=service_path,
+        )
+        logger.debug("iot_agent.devices.request_headers", headers=headers)
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -63,16 +67,20 @@ class IoTAgentGateway(IIoTAgentGateway):
 
                 response_data = response.json()
                 logger.info(
-                    f"Successfully retrieved {response_data.get('count', 0)} "
-                    f"devices from IoT Agent"
+                    "iot_agent.devices.response",
+                    count=response_data.get("count", 0),
+                    status_code=response.status_code,
                 )
 
                 return IoTAgentDevicesResponseDTO(**response_data)
 
         except httpx.HTTPStatusError as e:
             logger.error(
-                f"HTTP error when requesting devices from IoT Agent: "
-                f"{e.response.status_code} - {e.response.text}"
+                "iot_agent.devices.http_error",
+                status_code=e.response.status_code,
+                response_text=e.response.text,
+                url=url,
+                exc_info=e,
             )
             raise Exception(
                 f"IoT Agent returned HTTP {e.response.status_code}: "
@@ -80,11 +88,19 @@ class IoTAgentGateway(IIoTAgentGateway):
             )
 
         except httpx.RequestError as e:
-            logger.error(f"Request error when communicating with IoT Agent: {str(e)}")
+            logger.error(
+                "iot_agent.devices.request_error",
+                error=str(e),
+                url=url,
+                exc_info=e,
+            )
             raise Exception(f"Failed to communicate with IoT Agent: {str(e)}")
 
         except Exception as e:
             logger.error(
-                f"Unexpected error when getting devices from IoT Agent: {str(e)}"
+                "iot_agent.devices.unexpected_error",
+                error=str(e),
+                url=url,
+                exc_info=e,
             )
             raise Exception(f"Unexpected error communicating with IoT Agent: {str(e)}")

@@ -6,7 +6,6 @@ It orchestrates the flow of data to and from the IoT Agent
 and implements the business rules for device management.
 """
 
-import logging
 from collections import defaultdict
 from typing import Dict, List
 
@@ -18,8 +17,9 @@ from src.application.dtos.device_dto import (
     GroupedDevicesDTO,
 )
 from src.domain.gateways.iot_agent_gateway import IIoTAgentGateway
+from src.shared import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class GetDevicesUseCase:
@@ -54,7 +54,9 @@ class GetDevicesUseCase:
             Exception: If retrieval or processing fails
         """
         logger.info(
-            f"Getting devices for service: {service}, service_path: {service_path}"
+            "devices.fetch_started",
+            service=service,
+            service_path=service_path,
         )
 
         try:
@@ -63,7 +65,12 @@ class GetDevicesUseCase:
                 service, service_path
             )
 
-            logger.info(f"Retrieved {iot_agent_response.count} devices from IoT Agent")
+            logger.info(
+                "devices.gateway_response",
+                count=iot_agent_response.count,
+                service=service,
+                service_path=service_path,
+            )
 
             # Group devices by entity_type
             grouped_devices: Dict[str, List[DeviceEntityDTO]] = defaultdict(list)
@@ -86,15 +93,27 @@ class GetDevicesUseCase:
                 group = GroupedDevicesDTO(entity_type=entity_type, entities=entities)
                 devices.append(group)
 
-            logger.info(f"Grouped devices into {len(devices)} entity types")
+            logger.info(
+                "devices.grouped",
+                group_count=len(devices),
+                service=service,
+                service_path=service_path,
+            )
             for group in devices:
                 logger.debug(
-                    f"Entity type '{group.entity_type}' has "
-                    f"{len(group.entities)} entities"
+                    "devices.group_details",
+                    entity_type=group.entity_type,
+                    entity_count=len(group.entities),
                 )
 
             return DevicesResponseDTO(devices=devices)
 
         except Exception as e:
-            logger.error(f"Error in GetDevicesUseCase: {str(e)}")
+            logger.error(
+                "devices.fetch_failed",
+                service=service,
+                service_path=service_path,
+                error=str(e),
+                exc_info=e,
+            )
             raise
