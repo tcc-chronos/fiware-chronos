@@ -488,7 +488,10 @@ def train_model_task(
             metadata_artifact_id,
         ) = asyncio.run(
             model_training.execute(
-                model_config=model, collected_data=data_dtos, window_size=window_size
+                model_config=model,
+                collected_data=data_dtos,
+                window_size=window_size,
+                training_job_id=training_job_id,
             )
         )
 

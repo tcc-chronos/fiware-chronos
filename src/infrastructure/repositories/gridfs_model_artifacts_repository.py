@@ -75,9 +75,6 @@ class GridFSModelArtifactsRepository(IModelArtifactsRepository):
             if not filename:
                 filename = f"{model_id}_{artifact_type}"
 
-            # Check if artifact already exists and delete it
-            await self._delete_existing_artifact(model_id, artifact_type)
-
             # Save to GridFS
             file_id = self.fs.put(
                 content,
@@ -120,13 +117,19 @@ class GridFSModelArtifactsRepository(IModelArtifactsRepository):
             ModelArtifact if found, None otherwise
         """
         try:
-            # Find the artifact by model_id and artifact_type
-            grid_out = self.fs.find_one(
-                {
-                    "metadata.model_id": str(model_id),
-                    "metadata.artifact_type": artifact_type,
-                }
+            # Find the most recent artifact by model_id and artifact_type
+            cursor = (
+                self.fs.find(
+                    {
+                        "metadata.model_id": str(model_id),
+                        "metadata.artifact_type": artifact_type,
+                    }
+                )
+                .sort("uploadDate", -1)
+                .limit(1)
             )
+
+            grid_out = next(cursor, None)
 
             if not grid_out:
                 logger.debug(
@@ -154,7 +157,7 @@ class GridFSModelArtifactsRepository(IModelArtifactsRepository):
                     if grid_out.metadata
                     else "unknown"
                 ),
-                content=grid_out.read(),
+                content=content,
                 metadata=dict(grid_out.metadata) if grid_out.metadata else None,
                 filename=grid_out.filename,
             )
@@ -291,11 +294,15 @@ class GridFSModelArtifactsRepository(IModelArtifactsRepository):
             Dictionary mapping artifact types to their IDs
         """
         try:
-            artifacts = self.fs.find({"metadata.model_id": str(model_id)})
+            artifacts = self.fs.find({"metadata.model_id": str(model_id)}).sort(
+                "uploadDate", -1
+            )
 
-            result = {}
+            result: Dict[str, str] = {}
             for artifact in artifacts:
                 artifact_type = artifact.metadata.get("artifact_type", "unknown")
+                if artifact_type in result:
+                    continue  # keep the most recent artifact per type
                 result[artifact_type] = str(artifact._id)
 
             logger.debug(

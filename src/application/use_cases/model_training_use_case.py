@@ -66,6 +66,7 @@ class ModelTrainingUseCase:
         model_config: Model,
         collected_data: List[CollectedDataDTO],
         window_size: int,
+        training_job_id: str,
     ) -> Tuple[TrainingMetrics, str, str, str, str]:
         """
         Execute model training.
@@ -74,6 +75,7 @@ class ModelTrainingUseCase:
             model_config: Model configuration with hyperparameters
             collected_data: Collected training data
             window_size: Sequence window size
+            training_job_id: Identifier of the training job generating the artifacts
 
         Returns:
             Tuple of (metrics, model_artifact_id, x_scaler_artifact_id,
@@ -175,6 +177,7 @@ class ModelTrainingUseCase:
                     "val_sequences": len(x_val),
                     "test_sequences": len(x_test),
                 },
+                training_job_id=training_job_id,
             )
 
             # Create metrics object
@@ -448,6 +451,7 @@ class ModelTrainingUseCase:
         test_metrics: dict,
         training_duration: float,
         data_info: dict,
+        training_job_id: str,
     ) -> Tuple[str, str, str, str]:
         """Save model artifacts to GridFS and return artifact IDs."""
 
@@ -458,6 +462,7 @@ class ModelTrainingUseCase:
             # Prepare metadata
             metadata = {
                 "model_id": str(model_id),
+                "training_job_id": training_job_id,
                 "timestamp": timestamp,
                 "window_size": window_size,
                 "feature_columns": feature_columns,
@@ -506,7 +511,12 @@ class ModelTrainingUseCase:
                 model_id=model_id,
                 artifact_type="model",
                 content=model_bytes,
-                metadata={"format": "tensorflow", "size": len(model_bytes)},
+                metadata={
+                    "format": "tensorflow",
+                    "size": len(model_bytes),
+                    "timestamp": timestamp,
+                    "training_job_id": training_job_id,
+                },
                 filename=f"{model_id}_{timestamp}_model.tf",
             )
 
@@ -514,7 +524,12 @@ class ModelTrainingUseCase:
                 model_id=model_id,
                 artifact_type="x_scaler",
                 content=x_scaler_bytes,
-                metadata={"format": "pickle", "size": len(x_scaler_bytes)},
+                metadata={
+                    "format": "pickle",
+                    "size": len(x_scaler_bytes),
+                    "timestamp": timestamp,
+                    "training_job_id": training_job_id,
+                },
                 filename=f"{model_id}_{timestamp}_x_scaler.pkl",
             )
 
@@ -522,7 +537,12 @@ class ModelTrainingUseCase:
                 model_id=model_id,
                 artifact_type="y_scaler",
                 content=y_scaler_bytes,
-                metadata={"format": "pickle", "size": len(y_scaler_bytes)},
+                metadata={
+                    "format": "pickle",
+                    "size": len(y_scaler_bytes),
+                    "timestamp": timestamp,
+                    "training_job_id": training_job_id,
+                },
                 filename=f"{model_id}_{timestamp}_y_scaler.pkl",
             )
 
@@ -530,7 +550,12 @@ class ModelTrainingUseCase:
                 model_id=model_id,
                 artifact_type="metadata",
                 content=metadata_bytes,
-                metadata={"format": "json", "size": len(metadata_bytes)},
+                metadata={
+                    "format": "json",
+                    "size": len(metadata_bytes),
+                    "timestamp": timestamp,
+                    "training_job_id": training_job_id,
+                },
                 filename=f"{model_id}_{timestamp}_metadata.json",
             )
 
