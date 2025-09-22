@@ -328,19 +328,22 @@ class TrainingJobRepository(ITrainingJobRepository):
                 "best_epoch": metrics.best_epoch,
             }
 
+            completed_at = datetime.now(timezone.utc).isoformat()
+
             # Update document
             result = collection.update_one(
                 {"id": str(training_job_id)},
                 {
                     "$set": {
                         "status": TrainingStatus.COMPLETED.value,
-                        "end_time": datetime.now(timezone.utc).isoformat(),
+                        "end_time": completed_at,
+                        "training_end": completed_at,
                         "metrics": metrics_dict,
                         "model_artifact_id": model_artifact_id,
                         "x_scaler_artifact_id": x_scaler_artifact_id,
                         "y_scaler_artifact_id": y_scaler_artifact_id,
                         "metadata_artifact_id": metadata_artifact_id,
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": completed_at,
                     }
                 },
             )
