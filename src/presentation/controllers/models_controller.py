@@ -138,6 +138,18 @@ async def create_model(
     Create a new deep learning model configuration.
     """
     try:
+        if model_dto.dense_layers and model_dto.dense_layers[-1].units == 1:
+            logger.warning(
+                "models.create.redundant_output_layer_detected",
+                message=(
+                    "Received dense layer with a single neuron at the end of the "
+                    "configuration. The system already appends the final output "
+                    "layer automatically."
+                ),
+                provided_layers=[
+                    layer.model_dump() for layer in model_dto.dense_layers
+                ],
+            )
         return await create_model_use_case.execute(model_dto=model_dto)
     except ModelOperationError as e:
         logger.error("Failed to create model", error=str(e))
@@ -166,6 +178,19 @@ async def update_model(
     Update an existing model with new values.
     """
     try:
+        if model_dto.dense_layers and model_dto.dense_layers[-1].units == 1:
+            logger.warning(
+                "models.update.redundant_output_layer_detected",
+                message=(
+                    "Received dense layer with a single neuron at the end of the "
+                    "configuration. The system already appends the final output "
+                    "layer automatically."
+                ),
+                provided_layers=[
+                    layer.model_dump() for layer in model_dto.dense_layers
+                ],
+                model_id=str(model_id),
+            )
         return await update_model_use_case.execute(
             model_id=model_id, model_dto=model_dto
         )

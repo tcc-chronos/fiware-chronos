@@ -11,7 +11,13 @@ from uuid import UUID
 import pymongo
 
 from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
-from src.domain.entities.model import Model, ModelStatus, ModelType
+from src.domain.entities.model import (
+    DenseLayerConfig,
+    Model,
+    ModelStatus,
+    ModelType,
+    RNNLayerConfig,
+)
 from src.domain.repositories.model_repository import IModelRepository
 from src.infrastructure.database import MongoDatabase
 
@@ -42,8 +48,6 @@ class ModelRepository(IModelRepository):
             "description": model.description,
             "model_type": model.model_type.value,
             "status": model.status.value,
-            "rnn_dropout": model.rnn_dropout,
-            "dense_dropout": model.dense_dropout,
             "batch_size": model.batch_size,
             "epochs": model.epochs,
             "learning_rate": model.learning_rate,
@@ -51,8 +55,22 @@ class ModelRepository(IModelRepository):
             "lookback_window": model.lookback_window,
             "forecast_horizon": model.forecast_horizon,
             "feature": model.feature,
-            "rnn_units": model.rnn_units,
-            "dense_units": model.dense_units,
+            "rnn_layers": [
+                {
+                    "units": layer.units,
+                    "dropout": layer.dropout,
+                    "recurrent_dropout": layer.recurrent_dropout,
+                }
+                for layer in model.rnn_layers
+            ],
+            "dense_layers": [
+                {
+                    "units": layer.units,
+                    "dropout": layer.dropout,
+                    "activation": layer.activation,
+                }
+                for layer in model.dense_layers
+            ],
             "early_stopping_patience": model.early_stopping_patience,
             "entity_type": model.entity_type,
             "entity_id": model.entity_id,
@@ -73,26 +91,76 @@ class ModelRepository(IModelRepository):
                 else ModelStatus.DRAFT
             )
 
+        rnn_layers_payload = document.get("rnn_layers") or []
+        if rnn_layers_payload:
+            rnn_layers = [
+                RNNLayerConfig(
+                    units=int(layer.get("units", 0)),
+                    dropout=float(layer.get("dropout", 0.1)),
+                    recurrent_dropout=float(layer.get("recurrent_dropout", 0.0)),
+                )
+                for layer in rnn_layers_payload
+                if layer and layer.get("units") is not None
+            ]
+        else:
+            legacy_units = document.get("rnn_units")
+            legacy_dropout = float(document.get("rnn_dropout", 0.1))
+            if legacy_units:
+                rnn_layers = [
+                    RNNLayerConfig(units=int(units), dropout=legacy_dropout)
+                    for units in legacy_units
+                    if units is not None
+                ]
+            else:
+                rnn_layers = []
+
+        if not rnn_layers:
+            rnn_layers = [RNNLayerConfig(units=64)]
+
+        dense_layers_payload = document.get("dense_layers") or []
+        if dense_layers_payload:
+            dense_layers = [
+                DenseLayerConfig(
+                    units=int(layer.get("units", 0)),
+                    dropout=float(layer.get("dropout", 0.1)),
+                    activation=layer.get("activation", "relu"),
+                )
+                for layer in dense_layers_payload
+                if layer and layer.get("units") is not None
+            ]
+        else:
+            legacy_units = document.get("dense_units")
+            legacy_dropout = float(document.get("dense_dropout", 0.1))
+            if legacy_units:
+                dense_layers = [
+                    DenseLayerConfig(units=int(units), dropout=legacy_dropout)
+                    for units in legacy_units
+                    if units is not None
+                ]
+            else:
+                dense_layers = []
+
+        if not rnn_layers:
+            rnn_layers = [RNNLayerConfig(units=64)]
+
         return Model(
             id=UUID(document["id"]),
             name=document["name"],
             description=document.get("description"),
             model_type=ModelType(document["model_type"]),
             status=status,
-            rnn_dropout=document.get("rnn_dropout", 0.0),
-            dense_dropout=document.get("dense_dropout", 0.2),
             batch_size=document["batch_size"],
             epochs=document["epochs"],
             learning_rate=document["learning_rate"],
             validation_split=document["validation_split"],
             lookback_window=document["lookback_window"],
             forecast_horizon=document["forecast_horizon"],
-            feature=document.get("feature", "value"),
-            rnn_units=document.get("rnn_units", [64]),
-            dense_units=document.get("dense_units", [32]),
+            feature=document.get("feature") or "",
+            rnn_layers=rnn_layers,
+            dense_layers=dense_layers,
             early_stopping_patience=document.get("early_stopping_patience"),
-            entity_type=document.get("entity_type"),
-            entity_id=document.get("entity_id"),
+            entity_type=document.get("entity_type") or "",
+            entity_id=document.get("entity_id") or "",
             created_at=document["created_at"],
             updated_at=document["updated_at"],
             has_successful_training=document.get("has_successful_training", False),

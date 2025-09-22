@@ -214,20 +214,36 @@ class ModelTrainingUseCase:
     def _validate_config(self, config: Model) -> None:
         """Validate model configuration."""
 
-        if not config.rnn_units or len(config.rnn_units) == 0:
-            raise ModelTrainingError("RNN units must be specified")
+        if not config.rnn_layers:
+            raise ModelTrainingError("At least one RNN layer must be configured")
 
-        if any(units <= 0 for units in config.rnn_units):
-            raise ModelTrainingError("All RNN units must be positive")
+        if any(layer.units <= 0 for layer in config.rnn_layers):
+            raise ModelTrainingError(
+                "All RNN layers must have a positive number of units"
+            )
 
-        if config.dense_units and any(units <= 0 for units in config.dense_units):
-            raise ModelTrainingError("All dense units must be positive")
+        if any(layer.dropout < 0 or layer.dropout >= 1 for layer in config.rnn_layers):
+            raise ModelTrainingError("RNN layer dropout must be between 0 and 1")
 
-        if not (0 <= config.rnn_dropout < 1):
-            raise ModelTrainingError("RNN dropout must be between 0 and 1")
+        if any(
+            layer.recurrent_dropout < 0 or layer.recurrent_dropout >= 1
+            for layer in config.rnn_layers
+        ):
+            raise ModelTrainingError(
+                "RNN layer recurrent_dropout must be between 0 and 1"
+            )
 
-        if not (0 <= config.dense_dropout < 1):
-            raise ModelTrainingError("Dense dropout must be between 0 and 1")
+        if config.dense_layers and any(
+            layer.units <= 0 for layer in config.dense_layers
+        ):
+            raise ModelTrainingError(
+                "All dense layers must have a positive number of units"
+            )
+
+        if config.dense_layers and any(
+            layer.dropout < 0 or layer.dropout >= 1 for layer in config.dense_layers
+        ):
+            raise ModelTrainingError("Dense layer dropout must be between 0 and 1")
 
         if config.learning_rate <= 0:
             raise ModelTrainingError("Learning rate must be positive")
@@ -250,29 +266,27 @@ class ModelTrainingUseCase:
         RNNLayer = LSTM if config.model_type.lower() == "lstm" else GRU
 
         # Add RNN layers
-        for i, units in enumerate(config.rnn_units):
-            return_sequences = i < len(config.rnn_units) - 1
+        for i, layer_cfg in enumerate(config.rnn_layers):
+            return_sequences = i < len(config.rnn_layers) - 1
 
             model.add(
                 RNNLayer(
-                    units,
+                    layer_cfg.units,
                     return_sequences=return_sequences,
-                    dropout=config.rnn_dropout,
-                    recurrent_dropout=0.0,  # Avoid performance penalty
+                    dropout=layer_cfg.dropout,
+                    recurrent_dropout=layer_cfg.recurrent_dropout,
                 )
             )
 
-            # Add dropout after each RNN layer if specified
-            if config.rnn_dropout > 0:
-                model.add(Dropout(config.rnn_dropout))
+            if layer_cfg.dropout > 0:
+                model.add(Dropout(layer_cfg.dropout))
 
         # Add dense layers
-        for units in config.dense_units:
-            model.add(Dense(units, activation="relu"))
+        for dense_layer in config.dense_layers:
+            model.add(Dense(dense_layer.units, activation=dense_layer.activation))
 
-            # Add dropout after each dense layer if specified
-            if config.dense_dropout > 0:
-                model.add(Dropout(config.dense_dropout))
+            if dense_layer.dropout > 0:
+                model.add(Dropout(dense_layer.dropout))
 
         # Output layer
         model.add(Dense(1))
@@ -287,8 +301,8 @@ class ModelTrainingUseCase:
             "Model built and compiled",
             total_params=model.count_params(),
             model_type=config.model_type,
-            rnn_units=config.rnn_units,
-            dense_units=config.dense_units,
+            rnn_layers=[layer.__dict__ for layer in config.rnn_layers],
+            dense_layers=[layer.__dict__ for layer in config.dense_layers],
         )
 
         return model
@@ -472,8 +486,22 @@ class ModelTrainingUseCase:
                 "data_info": data_info,
                 "model_config": {
                     "model_type": model_config.model_type.value,
-                    "rnn_units": model_config.rnn_units,
-                    "dense_units": model_config.dense_units,
+                    "rnn_layers": [
+                        {
+                            "units": layer.units,
+                            "dropout": layer.dropout,
+                            "recurrent_dropout": layer.recurrent_dropout,
+                        }
+                        for layer in model_config.rnn_layers
+                    ],
+                    "dense_layers": [
+                        {
+                            "units": layer.units,
+                            "dropout": layer.dropout,
+                            "activation": layer.activation,
+                        }
+                        for layer in model_config.dense_layers
+                    ],
                     "batch_size": model_config.batch_size,
                     "epochs": model_config.epochs,
                     "learning_rate": model_config.learning_rate,

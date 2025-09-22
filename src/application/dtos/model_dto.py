@@ -64,6 +64,41 @@ class ModelTypeOptionDTO(BaseModel):
     }
 
 
+class RNNLayerDTO(BaseModel):
+    """DTO describing a recurrent layer configuration."""
+
+    units: int = Field(..., description="Number of neurons for the RNN layer", gt=0)
+    dropout: float = Field(
+        0.1,
+        description="Dropout rate applied after the RNN layer",
+        ge=0.0,
+        lt=1.0,
+    )
+    recurrent_dropout: float = Field(
+        0.0,
+        description="Dropout rate applied to recurrent connections",
+        ge=0.0,
+        lt=1.0,
+    )
+
+
+class DenseLayerDTO(BaseModel):
+    """DTO describing a dense layer configuration."""
+
+    units: int = Field(..., description="Number of neurons for the dense layer", gt=0)
+    dropout: float = Field(
+        0.1,
+        description="Dropout rate applied after the dense layer",
+        ge=0.0,
+        lt=1.0,
+    )
+    activation: str = Field(
+        "relu",
+        description="Activation function for the dense layer",
+        min_length=1,
+    )
+
+
 class ModelCreateDTO(BaseModel):
     """DTO for creating a new model."""
 
@@ -71,20 +106,9 @@ class ModelCreateDTO(BaseModel):
         None, description="Name of the model", min_length=1, max_length=100
     )
     description: Optional[str] = Field(None, description="Description of the model")
-    model_type: ModelType = Field(
-        default=ModelType.LSTM, description="Type of model architecture"
-    )
+    model_type: ModelType = Field(..., description="Type of model architecture")
 
     # Hyperparameters
-    rnn_dropout: float = Field(
-        default=0.0,
-        description="Dropout rate for recurrent connections in RNN layers",
-        ge=0.0,
-        le=0.9,
-    )
-    dense_dropout: float = Field(
-        default=0.2, description="Dropout rate for dense layers", ge=0.0, le=0.9
-    )
     batch_size: int = Field(
         default=32, description="Batch size for training", ge=1, le=1024
     )
@@ -97,12 +121,14 @@ class ModelCreateDTO(BaseModel):
     validation_split: float = Field(
         default=0.2, description="Validation split ratio", ge=0.0, lt=1.0
     )
-    rnn_units: List[int] = Field(
-        ..., description="List of units for each RNN layer", min_length=1
+    rnn_layers: List[RNNLayerDTO] = Field(
+        ...,
+        description="Configuration for each RNN layer (ordered from input to output)",
+        min_length=1,
     )
-    dense_units: List[int] = Field(
-        default_factory=lambda: [64, 32],
-        description="List of units for each Dense layer",
+    dense_layers: List[DenseLayerDTO] = Field(
+        default_factory=list,
+        description="Configuration for each dense layer after the recurrent stack",
     )
     early_stopping_patience: Optional[int] = None
 
@@ -114,12 +140,12 @@ class ModelCreateDTO(BaseModel):
         default=1, description="Size of forecast horizon", ge=1, le=8760
     )
     feature: str = Field(
-        default="value", description="Feature name to use from STH Comet"
+        ..., description="Feature name to use from STH Comet", min_length=1
     )
 
     # FIWARE STH Comet configuration
-    entity_type: Optional[str] = Field(None, description="Entity type in FIWARE")
-    entity_id: Optional[str] = Field(None, description="Entity ID in FIWARE")
+    entity_type: str = Field(..., description="Entity type in FIWARE", min_length=1)
+    entity_id: str = Field(..., description="Entity ID in FIWARE", min_length=1)
 
     @field_validator("name")
     @classmethod
@@ -129,10 +155,13 @@ class ModelCreateDTO(BaseModel):
             return v
 
         values = info.data
-        feature = values.get("feature", "value")
-        model_type = values.get("model_type", ModelType.LSTM)
+        feature = values.get("feature")
+        model_type = values.get("model_type")
 
-        return f"{model_type} - {feature}"
+        if feature is None or model_type is None:
+            return v
+
+        return f"{model_type.value.upper()} - {feature}"
 
     @field_validator("description")
     @classmethod
@@ -142,26 +171,13 @@ class ModelCreateDTO(BaseModel):
             return v
 
         values = info.data
-        feature = values.get("feature", "value")
-        model_type = values.get("model_type", ModelType.LSTM)
+        feature = values.get("feature")
+        model_type = values.get("model_type")
 
-        return f"{model_type} model for {feature} forecasting"
+        if feature is None or model_type is None:
+            return v
 
-    @field_validator("rnn_units")
-    @classmethod
-    def validate_rnn_units(cls, v):
-        """Validate that rnn_units has at least one positive value."""
-        if not v or any(unit <= 0 for unit in v):
-            raise ValueError("rnn_units must contain at least one positive value")
-        return v
-
-    @field_validator("dense_units")
-    @classmethod
-    def validate_dense_units(cls, v):
-        """Validate that dense_units contains only positive values."""
-        if any(unit <= 0 for unit in v):
-            raise ValueError("dense_units must contain only positive values")
-        return v
+        return f"{model_type.value.upper()} model for {feature} forecasting"
 
     @model_validator(mode="after")
     def calculate_early_stopping_patience(self) -> "ModelCreateDTO":
@@ -178,19 +194,23 @@ class ModelCreateDTO(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "name": "Temperature Forecasting Model",
+                "name": "LSTM - temperature",
                 "description": "LSTM model for temperature forecasting",
                 "model_type": "lstm",
-                "rnn_dropout": 0,
-                "dense_dropout": 0.2,
                 "batch_size": 32,
                 "epochs": 100,
                 "learning_rate": 0.001,
                 "lookback_window": 24,
                 "forecast_horizon": 6,
                 "feature": "temperature",
-                "rnn_units": [128, 64],
-                "dense_units": [64, 32],
+                "rnn_layers": [
+                    {"units": 128, "dropout": 0.1, "recurrent_dropout": 0.0},
+                    {"units": 64, "dropout": 0.2, "recurrent_dropout": 0.05},
+                ],
+                "dense_layers": [
+                    {"units": 64, "dropout": 0.1, "activation": "relu"},
+                    {"units": 32, "dropout": 0.1, "activation": "relu"},
+                ],
                 "early_stopping_patience": 10,
                 "entity_type": "Sensor",
                 "entity_id": "urn:ngsi-ld:Chronos:ESP32:001",
@@ -211,15 +231,6 @@ class ModelUpdateDTO(BaseModel):
     )
 
     # Hyperparameters
-    rnn_dropout: Optional[float] = Field(
-        None,
-        description="Dropout rate for recurrent connections in RNN layers",
-        ge=0.0,
-        le=0.9,
-    )
-    dense_dropout: Optional[float] = Field(
-        None, description="Dropout rate for dense layers", ge=0.0, le=0.9
-    )
     batch_size: Optional[int] = Field(
         None, description="Batch size for training", ge=1, le=1024
     )
@@ -232,11 +243,13 @@ class ModelUpdateDTO(BaseModel):
     validation_split: Optional[float] = Field(
         None, description="Validation split ratio", ge=0.0, lt=1.0
     )
-    rnn_units: Optional[List[int]] = Field(
-        None, description="List of units for each RNN layer"
+    rnn_layers: Optional[List[RNNLayerDTO]] = Field(
+        None,
+        description="Configuration for each RNN layer (ordered from input to output)",
+        min_length=1,
     )
-    dense_units: Optional[List[int]] = Field(
-        None, description="List of units for each Dense layer"
+    dense_layers: Optional[List[DenseLayerDTO]] = Field(
+        None, description="Configuration for each dense layer"
     )
     early_stopping_patience: Optional[int] = None
 
@@ -248,28 +261,16 @@ class ModelUpdateDTO(BaseModel):
         None, description="Size of forecast horizon", ge=1, le=8760
     )
     feature: Optional[str] = Field(
-        None, description="Feature name to use from STH Comet"
+        None, description="Feature name to use from STH Comet", min_length=1
     )
 
     # FIWARE STH Comet configuration
-    entity_type: Optional[str] = Field(None, description="Entity type in FIWARE")
-    entity_id: Optional[str] = Field(None, description="Entity ID in FIWARE")
-
-    @field_validator("rnn_units")
-    @classmethod
-    def validate_rnn_units(cls, v):
-        """Validate that rnn_units has only positive values."""
-        if v and any(unit <= 0 for unit in v):
-            raise ValueError("rnn_units must contain only positive values")
-        return v
-
-    @field_validator("dense_units")
-    @classmethod
-    def validate_dense_units(cls, v):
-        """Validate that dense_units contains only positive values."""
-        if v and any(unit <= 0 for unit in v):
-            raise ValueError("dense_units must contain only positive values")
-        return v
+    entity_type: Optional[str] = Field(
+        None, description="Entity type in FIWARE", min_length=1
+    )
+    entity_id: Optional[str] = Field(
+        None, description="Entity ID in FIWARE", min_length=1
+    )
 
     @model_validator(mode="after")
     def calculate_early_stopping_patience(self) -> "ModelUpdateDTO":
@@ -292,12 +293,16 @@ class ModelUpdateDTO(BaseModel):
             "example": {
                 "name": "Updated Temperature Model",
                 "description": "Modelo atualizado para previsão de temperatura",
-                "rnn_units": [128, 64],
-                "dense_units": [64, 32],
+                "rnn_layers": [
+                    {"units": 128, "dropout": 0.15, "recurrent_dropout": 0.05},
+                    {"units": 64, "dropout": 0.1, "recurrent_dropout": 0.0},
+                ],
+                "dense_layers": [
+                    {"units": 64, "dropout": 0.1, "activation": "relu"},
+                    {"units": 32, "dropout": 0.1, "activation": "relu"},
+                ],
                 "epochs": 150,
                 "batch_size": 64,
-                "rnn_dropout": 0.2,
-                "dense_dropout": 0.3,
                 "learning_rate": 0.0005,
                 "feature": "temperatura",
             }
@@ -315,14 +320,12 @@ class ModelResponseDTO(BaseModel):
     status: ModelStatus
 
     # Hyperparameters
-    dense_dropout: float
-    rnn_dropout: float
     batch_size: int
     epochs: int
     learning_rate: float
     validation_split: float
-    rnn_units: List[int]
-    dense_units: List[int]
+    rnn_layers: List[RNNLayerDTO]
+    dense_layers: List[DenseLayerDTO]
     early_stopping_patience: Optional[int] = None
 
     # Input/Output configuration
@@ -342,18 +345,22 @@ class ModelResponseDTO(BaseModel):
         "json_schema_extra": {
             "example": {
                 "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "name": "Temperature Forecasting Model",
+                "name": "LSTM - temperature",
                 "description": "LSTM model for temperature forecasting",
                 "model_type": "lstm",
                 "status": "draft",
-                "rnn_dropout": 0.0,
-                "dense_dropout": 0.2,
                 "batch_size": 32,
                 "epochs": 100,
                 "learning_rate": 0.001,
                 "validation_split": 0.2,
-                "rnn_units": [128, 64],
-                "dense_units": [64, 32],
+                "rnn_layers": [
+                    {"units": 128, "dropout": 0.1, "recurrent_dropout": 0.0},
+                    {"units": 64, "dropout": 0.2, "recurrent_dropout": 0.05},
+                ],
+                "dense_layers": [
+                    {"units": 64, "dropout": 0.1, "activation": "relu"},
+                    {"units": 32, "dropout": 0.1, "activation": "relu"},
+                ],
                 "early_stopping_patience": 10,
                 "lookback_window": 24,
                 "forecast_horizon": 6,

@@ -29,6 +29,24 @@ class ModelStatus(str, Enum):
 
 
 @dataclass
+class RNNLayerConfig:
+    """Configuration for an individual recurrent layer."""
+
+    units: int
+    dropout: float = 0.1
+    recurrent_dropout: float = 0.0
+
+
+@dataclass
+class DenseLayerConfig:
+    """Configuration for an individual dense layer."""
+
+    units: int
+    dropout: float = 0.1
+    activation: str = "relu"
+
+
+@dataclass
 class Model:
     """Represents a deep learning model configuration for time series forecasting."""
 
@@ -39,24 +57,24 @@ class Model:
     status: ModelStatus = ModelStatus.DRAFT
 
     # Hyperparameters
-    rnn_dropout: float = 0.0
-    dense_dropout: float = 0.2
     batch_size: int = 32
     epochs: int = 100
     learning_rate: float = 0.001
     validation_split: float = 0.2
-    rnn_units: List[int] = field(default_factory=lambda: [64])
-    dense_units: List[int] = field(default_factory=lambda: [32])
+    rnn_layers: List[RNNLayerConfig] = field(
+        default_factory=lambda: [RNNLayerConfig(units=64)]
+    )
+    dense_layers: List[DenseLayerConfig] = field(default_factory=list)
     early_stopping_patience: Optional[int] = None
 
     # Input/Output configuration
     lookback_window: int = 24
     forecast_horizon: int = 1
-    feature: str = "value"
+    feature: str = ""
 
     # FIWARE STH Comet configuration
-    entity_type: Optional[str] = None
-    entity_id: Optional[str] = None
+    entity_type: str = ""
+    entity_id: str = ""
 
     # Other attributes
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

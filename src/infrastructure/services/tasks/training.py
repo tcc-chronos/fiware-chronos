@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 from uuid import UUID
 
-from src.domain.entities.model import ModelType
+from src.domain.entities.model import DenseLayerConfig, ModelType, RNNLayerConfig
 from src.domain.entities.training_job import TrainingStatus
 from src.infrastructure.services.celery_config import celery_app
 from src.infrastructure.services.tasks.base import CallbackTask, logger
@@ -121,17 +121,50 @@ def train_model_task(
         model.id = UUID(model_config["id"])
         model.name = model_config["name"]
         model.model_type = ModelType(model_config["model_type"])
-        model.rnn_units = model_config["rnn_units"]
-        model.dense_units = model_config["dense_units"]
-        model.rnn_dropout = model_config["rnn_dropout"]
-        model.dense_dropout = model_config["dense_dropout"]
-        model.learning_rate = model_config["learning_rate"]
-        model.batch_size = model_config["batch_size"]
-        model.epochs = model_config["epochs"]
+
+        rnn_layers_payload = model_config.get("rnn_layers", [])
+        if rnn_layers_payload:
+            model.rnn_layers = [
+                RNNLayerConfig(
+                    units=int(layer.get("units", 0)),
+                    dropout=float(layer.get("dropout", 0.1)),
+                    recurrent_dropout=float(layer.get("recurrent_dropout", 0.0)),
+                )
+                for layer in rnn_layers_payload
+            ]
+        else:
+            legacy_units = model_config.get("rnn_units", [64])
+            legacy_dropout = float(model_config.get("rnn_dropout", 0.1))
+            model.rnn_layers = [
+                RNNLayerConfig(units=int(units), dropout=legacy_dropout)
+                for units in legacy_units
+            ]
+
+        dense_layers_payload = model_config.get("dense_layers", [])
+        if dense_layers_payload:
+            model.dense_layers = [
+                DenseLayerConfig(
+                    units=int(layer.get("units", 0)),
+                    dropout=float(layer.get("dropout", 0.1)),
+                    activation=layer.get("activation", "relu"),
+                )
+                for layer in dense_layers_payload
+            ]
+        else:
+            legacy_dense_units = model_config.get("dense_units", [32])
+            legacy_dense_dropout = float(model_config.get("dense_dropout", 0.1))
+            model.dense_layers = [
+                DenseLayerConfig(units=int(units), dropout=legacy_dense_dropout)
+                for units in legacy_dense_units
+            ]
+
+        model.learning_rate = float(model_config["learning_rate"])
+        model.batch_size = int(model_config["batch_size"])
+        model.epochs = int(model_config["epochs"])
         model.early_stopping_patience = model_config.get("early_stopping_patience")
-        model.feature = model_config["feature"]
-        model.entity_type = model_config.get("entity_type")
-        model.entity_id = model_config.get("entity_id")
+        model.feature = str(model_config["feature"])
+        model.entity_type = str(model_config.get("entity_type", ""))
+        model.entity_id = str(model_config.get("entity_id", ""))
 
         data_dtos = [
             CollectedDataDTO(

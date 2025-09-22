@@ -170,10 +170,22 @@ def orchestrate_training(
                     "id": str(model.id),
                     "name": model.name,
                     "model_type": model.model_type.value,
-                    "rnn_units": model.rnn_units,
-                    "dense_units": model.dense_units,
-                    "rnn_dropout": model.rnn_dropout,
-                    "dense_dropout": model.dense_dropout,
+                    "rnn_layers": [
+                        {
+                            "units": layer.units,
+                            "dropout": layer.dropout,
+                            "recurrent_dropout": layer.recurrent_dropout,
+                        }
+                        for layer in model.rnn_layers
+                    ],
+                    "dense_layers": [
+                        {
+                            "units": layer.units,
+                            "dropout": layer.dropout,
+                            "activation": layer.activation,
+                        }
+                        for layer in model.dense_layers
+                    ],
                     "learning_rate": model.learning_rate,
                     "batch_size": model.batch_size,
                     "epochs": model.epochs,

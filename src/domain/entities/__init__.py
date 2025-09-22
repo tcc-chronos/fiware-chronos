@@ -10,12 +10,14 @@ from .errors import (
     ModelOperationError,
     ModelValidationError,
 )
-from .model import Model, ModelStatus, ModelType
+from .model import DenseLayerConfig, Model, ModelStatus, ModelType, RNNLayerConfig
 
 __all__ = [
     "Model",
     "ModelType",
     "ModelStatus",
+    "RNNLayerConfig",
+    "DenseLayerConfig",
     "DomainError",
     "ModelNotFoundError",
     "ModelValidationError",

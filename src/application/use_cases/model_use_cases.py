@@ -12,19 +12,59 @@ from uuid import UUID
 from dependency_injector.wiring import Provide, inject
 
 from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
-from src.domain.entities.model import Model, ModelStatus, ModelType
+from src.domain.entities.model import (
+    DenseLayerConfig,
+    Model,
+    ModelStatus,
+    ModelType,
+    RNNLayerConfig,
+)
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
 
 from ..dtos.model_dto import (
+    DenseLayerDTO,
     ModelCreateDTO,
     ModelDetailResponseDTO,
     ModelResponseDTO,
     ModelTrainingSummaryDTO,
     ModelTypeOptionDTO,
     ModelUpdateDTO,
+    RNNLayerDTO,
 )
+
+
+def _to_rnn_layer_config(dto: RNNLayerDTO) -> RNNLayerConfig:
+    return RNNLayerConfig(
+        units=dto.units,
+        dropout=dto.dropout,
+        recurrent_dropout=dto.recurrent_dropout,
+    )
+
+
+def _to_dense_layer_config(dto: DenseLayerDTO) -> DenseLayerConfig:
+    return DenseLayerConfig(
+        units=dto.units,
+        dropout=dto.dropout,
+        activation=dto.activation,
+    )
+
+
+def _to_rnn_layer_dto(config: RNNLayerConfig) -> RNNLayerDTO:
+    return RNNLayerDTO(
+        units=config.units,
+        dropout=config.dropout,
+        recurrent_dropout=config.recurrent_dropout,
+    )
+
+
+def _to_dense_layer_dto(config: DenseLayerConfig) -> DenseLayerDTO:
+    return DenseLayerDTO(
+        units=config.units,
+        dropout=config.dropout,
+        activation=config.activation,
+    )
 
 
 class GetModelsUseCase:
@@ -110,8 +150,6 @@ class GetModelsUseCase:
             description=model.description,
             model_type=model.model_type,
             status=model.status,
-            rnn_dropout=model.rnn_dropout,
-            dense_dropout=model.dense_dropout,
             batch_size=model.batch_size,
             epochs=model.epochs,
             learning_rate=model.learning_rate,
@@ -119,8 +157,8 @@ class GetModelsUseCase:
             lookback_window=model.lookback_window,
             forecast_horizon=model.forecast_horizon,
             feature=model.feature,
-            rnn_units=model.rnn_units,
-            dense_units=model.dense_units,
+            rnn_layers=[_to_rnn_layer_dto(layer) for layer in model.rnn_layers],
+            dense_layers=[_to_dense_layer_dto(layer) for layer in model.dense_layers],
             early_stopping_patience=model.early_stopping_patience,
             entity_type=model.entity_type,
             entity_id=model.entity_id,
@@ -184,8 +222,6 @@ class GetModelByIdUseCase:
             description=model.description,
             model_type=model.model_type,
             status=model.status,
-            rnn_dropout=model.rnn_dropout,
-            dense_dropout=model.dense_dropout,
             batch_size=model.batch_size,
             epochs=model.epochs,
             learning_rate=model.learning_rate,
@@ -193,8 +229,8 @@ class GetModelByIdUseCase:
             lookback_window=model.lookback_window,
             forecast_horizon=model.forecast_horizon,
             feature=model.feature,
-            rnn_units=model.rnn_units,
-            dense_units=model.dense_units,
+            rnn_layers=[_to_rnn_layer_dto(layer) for layer in model.rnn_layers],
+            dense_layers=[_to_dense_layer_dto(layer) for layer in model.dense_layers],
             early_stopping_patience=model.early_stopping_patience,
             entity_type=model.entity_type,
             entity_id=model.entity_id,
@@ -231,22 +267,20 @@ class CreateModelUseCase:
         name = model_dto.name
         if name is None:
             feature = model_dto.feature
-            model_type = model_dto.model_type.value
-            name = f"{model_type} - {feature}"
+            model_type_label = model_dto.model_type.value.upper()
+            name = f"{model_type_label} - {feature}"
 
         description = model_dto.description
         if description is None:
             feature = model_dto.feature
-            model_type = model_dto.model_type.value
-            description = f"{model_type} model for {feature} forecasting"
+            model_type_label = model_dto.model_type.value.upper()
+            description = f"{model_type_label} model for {feature} forecasting"
 
         # Create the domain model from the DTO
         model = Model(
             name=name,
             description=description,
             model_type=model_dto.model_type,
-            rnn_dropout=model_dto.rnn_dropout,
-            dense_dropout=model_dto.dense_dropout,
             batch_size=model_dto.batch_size,
             epochs=model_dto.epochs,
             learning_rate=model_dto.learning_rate,
@@ -254,8 +288,10 @@ class CreateModelUseCase:
             lookback_window=model_dto.lookback_window,
             forecast_horizon=model_dto.forecast_horizon,
             feature=model_dto.feature,
-            rnn_units=model_dto.rnn_units,
-            dense_units=model_dto.dense_units,
+            rnn_layers=[_to_rnn_layer_config(layer) for layer in model_dto.rnn_layers],
+            dense_layers=[
+                _to_dense_layer_config(layer) for layer in model_dto.dense_layers
+            ],
             early_stopping_patience=model_dto.early_stopping_patience,
             entity_type=model_dto.entity_type,
             entity_id=model_dto.entity_id,
@@ -271,8 +307,6 @@ class CreateModelUseCase:
             description=created_model.description,
             model_type=created_model.model_type,
             status=created_model.status,
-            rnn_dropout=created_model.rnn_dropout,
-            dense_dropout=created_model.dense_dropout,
             batch_size=created_model.batch_size,
             epochs=created_model.epochs,
             learning_rate=created_model.learning_rate,
@@ -280,8 +314,10 @@ class CreateModelUseCase:
             lookback_window=created_model.lookback_window,
             forecast_horizon=created_model.forecast_horizon,
             feature=created_model.feature,
-            rnn_units=created_model.rnn_units,
-            dense_units=created_model.dense_units,
+            rnn_layers=[_to_rnn_layer_dto(layer) for layer in created_model.rnn_layers],
+            dense_layers=[
+                _to_dense_layer_dto(layer) for layer in created_model.dense_layers
+            ],
             early_stopping_patience=created_model.early_stopping_patience,
             entity_type=created_model.entity_type,
             entity_id=created_model.entity_id,
@@ -347,12 +383,6 @@ class UpdateModelUseCase:
         if model_dto.model_type is not None:
             model.model_type = model_dto.model_type
 
-        if model_dto.rnn_dropout is not None:
-            model.rnn_dropout = model_dto.rnn_dropout
-
-        if model_dto.dense_dropout is not None:
-            model.dense_dropout = model_dto.dense_dropout
-
         if model_dto.batch_size is not None:
             model.batch_size = model_dto.batch_size
 
@@ -374,11 +404,15 @@ class UpdateModelUseCase:
         if model_dto.feature is not None:
             model.feature = model_dto.feature
 
-        if model_dto.rnn_units is not None:
-            model.rnn_units = model_dto.rnn_units
+        if model_dto.rnn_layers is not None:
+            model.rnn_layers = [
+                _to_rnn_layer_config(layer) for layer in model_dto.rnn_layers
+            ]
 
-        if model_dto.dense_units is not None:
-            model.dense_units = model_dto.dense_units
+        if model_dto.dense_layers is not None:
+            model.dense_layers = [
+                _to_dense_layer_config(layer) for layer in model_dto.dense_layers
+            ]
 
         if model_dto.early_stopping_patience is not None:
             model.early_stopping_patience = model_dto.early_stopping_patience
@@ -390,25 +424,34 @@ class UpdateModelUseCase:
             model.entity_id = model_dto.entity_id
 
         # Update derived defaults when users did not provide overrides
-        default_name_before = f"{original_model_type.value} - {original_feature}"
+        default_name_before = (
+            f"{original_model_type.value.upper()} - {original_feature}"
+        )
+        legacy_default_name = f"{original_model_type.value} - {original_feature}"
         default_description_before = (
+            f"{original_model_type.value.upper()} model for "
+            f"{original_feature} forecasting"
+        )
+        legacy_default_description = (
             f"{original_model_type.value} model for {original_feature} forecasting"
         )
 
         if (
             model_dto.name is None
             and original_name
-            and original_name == default_name_before
+            and original_name in {default_name_before, legacy_default_name}
         ):
-            model.name = f"{model.model_type.value} - {model.feature}"
+            model.name = f"{model.model_type.value.upper()} - {model.feature}"
 
         if (
             model_dto.description is None
             and original_description
-            and original_description == default_description_before
+            and original_description
+            in {default_description_before, legacy_default_description}
         ):
             model.description = (
-                f"{model.model_type.value} model for {model.feature} forecasting"
+                f"{model.model_type.value.upper()} model for "
+                f"{model.feature} forecasting"
             )
 
         # Update timestamp
@@ -441,8 +484,6 @@ class UpdateModelUseCase:
             description=updated_model.description,
             model_type=updated_model.model_type,
             status=updated_model.status,
-            rnn_dropout=updated_model.rnn_dropout,
-            dense_dropout=updated_model.dense_dropout,
             batch_size=updated_model.batch_size,
             epochs=updated_model.epochs,
             learning_rate=updated_model.learning_rate,
@@ -450,8 +491,10 @@ class UpdateModelUseCase:
             lookback_window=updated_model.lookback_window,
             forecast_horizon=updated_model.forecast_horizon,
             feature=updated_model.feature,
-            rnn_units=updated_model.rnn_units,
-            dense_units=updated_model.dense_units,
+            rnn_layers=[_to_rnn_layer_dto(layer) for layer in updated_model.rnn_layers],
+            dense_layers=[
+                _to_dense_layer_dto(layer) for layer in updated_model.dense_layers
+            ],
             early_stopping_patience=updated_model.early_stopping_patience,
             entity_type=updated_model.entity_type,
             entity_id=updated_model.entity_id,
