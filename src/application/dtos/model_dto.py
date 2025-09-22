@@ -12,6 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from src.application.dtos.training_dto import TrainingMetricsDTO
 from src.domain.entities.model import ModelStatus, ModelType
 from src.domain.entities.training_job import TrainingStatus
 
@@ -29,6 +30,7 @@ class ModelTrainingSummaryDTO(BaseModel):
     total_data_points_collected: int = 0
     created_at: datetime
     updated_at: datetime
+    metrics: Optional[TrainingMetricsDTO] = None
 
     model_config = {
         "json_schema_extra": {
@@ -43,6 +45,12 @@ class ModelTrainingSummaryDTO(BaseModel):
                 "total_data_points_collected": 10000,
                 "created_at": "2025-09-21T16:00:00Z",
                 "updated_at": "2025-09-21T16:30:00Z",
+                "metrics": {
+                    "mse": 0.0012,
+                    "mae": 0.02,
+                    "rmse": 0.035,
+                    "best_epoch": 42,
+                },
             }
         }
     }

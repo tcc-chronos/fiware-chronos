@@ -19,6 +19,7 @@ from src.domain.entities.model import (
     ModelType,
     RNNLayerConfig,
 )
+from src.domain.entities.training_job import TrainingMetrics
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
@@ -33,6 +34,7 @@ from ..dtos.model_dto import (
     ModelUpdateDTO,
     RNNLayerDTO,
 )
+from ..dtos.training_dto import TrainingMetricsDTO
 
 
 def _to_rnn_layer_config(dto: RNNLayerDTO) -> RNNLayerConfig:
@@ -65,6 +67,15 @@ def _to_dense_layer_dto(config: DenseLayerConfig) -> DenseLayerDTO:
         dropout=config.dropout,
         activation=config.activation,
     )
+
+
+def _to_training_metrics_dto(
+    metrics: Optional[TrainingMetrics],
+) -> Optional[TrainingMetricsDTO]:
+    if metrics is None:
+        return None
+
+    return TrainingMetricsDTO(**metrics.__dict__)
 
 
 class GetModelsUseCase:
@@ -136,6 +147,7 @@ class GetModelsUseCase:
                     total_data_points_collected=job.total_data_points_collected,
                     created_at=job.created_at,
                     updated_at=job.updated_at,
+                    metrics=_to_training_metrics_dto(job.metrics),
                 )
             )
         return summaries
@@ -212,6 +224,7 @@ class GetModelByIdUseCase:
                 total_data_points_collected=job.total_data_points_collected,
                 created_at=job.created_at,
                 updated_at=job.updated_at,
+                metrics=_to_training_metrics_dto(job.metrics),
             )
             for job in sorted(trainings, key=lambda j: j.created_at, reverse=True)
         ]
