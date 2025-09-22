@@ -38,7 +38,13 @@ def create_celery_app(
         "chronos_worker",
         broker=effective_broker,
         backend=effective_backend,
-        include=["src.infrastructure.services.celery_tasks"],
+        include=[
+            "src.infrastructure.services.tasks.data_collection",
+            "src.infrastructure.services.tasks.training",
+            "src.infrastructure.services.tasks.processing",
+            "src.infrastructure.services.tasks.orchestration",
+            "src.infrastructure.services.tasks.cleanup",
+        ],
     )
 
     # Configure Celery
@@ -53,15 +59,9 @@ def create_celery_app(
         result_expires=3600,  # 1 hour
         # Task routing
         task_routes={
-            "src.infrastructure.services.celery_tasks.collect_data_chunk": {
-                "queue": "data_collection"
-            },
-            "src.infrastructure.services.celery_tasks.train_model_task": {
-                "queue": "model_training"
-            },
-            "src.infrastructure.services.celery_tasks.orchestrate_training": {
-                "queue": "orchestration"
-            },
+            "collect_data_chunk": {"queue": "data_collection"},
+            "train_model_task": {"queue": "model_training"},
+            "orchestrate_training": {"queue": "orchestration"},
         },
         # Worker configuration
         worker_prefetch_multiplier=1,
