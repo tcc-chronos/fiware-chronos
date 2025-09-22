@@ -48,6 +48,22 @@ class ModelTrainingSummaryDTO(BaseModel):
     }
 
 
+class ModelTypeOptionDTO(BaseModel):
+    """DTO representing an available model type option."""
+
+    value: ModelType
+    label: str
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "value": "lstm",
+                "label": "LSTM",
+            }
+        }
+    }
+
+
 class ModelCreateDTO(BaseModel):
     """DTO for creating a new model."""
 

@@ -15,6 +15,7 @@ from src.application.dtos.model_dto import (
     ModelCreateDTO,
     ModelDetailResponseDTO,
     ModelResponseDTO,
+    ModelTypeOptionDTO,
     ModelUpdateDTO,
 )
 from src.application.use_cases.model_use_cases import (
@@ -22,6 +23,7 @@ from src.application.use_cases.model_use_cases import (
     DeleteModelUseCase,
     GetModelByIdUseCase,
     GetModelsUseCase,
+    GetModelTypesUseCase,
     UpdateModelUseCase,
 )
 from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
@@ -66,6 +68,24 @@ async def get_models(
         )
     except Exception as e:
         logger.error("Failed to list models", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        )
+
+
+@router.get("/types", response_model=List[ModelTypeOptionDTO])
+@inject
+async def get_model_types(
+    get_model_types_use_case: GetModelTypesUseCase = Depends(
+        Provide["get_model_types_use_case"]
+    ),
+) -> List[ModelTypeOptionDTO]:
+    """Return model types supported by the platform."""
+    try:
+        return await get_model_types_use_case.execute()
+    except Exception as e:
+        logger.error("Failed to list model types", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",

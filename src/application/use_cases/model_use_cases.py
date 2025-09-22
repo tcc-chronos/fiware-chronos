@@ -12,7 +12,7 @@ from uuid import UUID
 from dependency_injector.wiring import Provide, inject
 
 from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
-from src.domain.entities.model import Model, ModelStatus
+from src.domain.entities.model import Model, ModelStatus, ModelType
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
@@ -22,6 +22,7 @@ from ..dtos.model_dto import (
     ModelDetailResponseDTO,
     ModelResponseDTO,
     ModelTrainingSummaryDTO,
+    ModelTypeOptionDTO,
     ModelUpdateDTO,
 )
 
@@ -502,3 +503,20 @@ class DeleteModelUseCase:
 
         # Delete the model
         await self.model_repository.delete(model_id)
+
+
+class GetModelTypesUseCase:
+    """Use case for listing available model types."""
+
+    async def execute(self) -> List[ModelTypeOptionDTO]:
+        """Return the model types supported by the platform."""
+
+        options: List[ModelTypeOptionDTO] = []
+        for model_type in ModelType:
+            options.append(
+                ModelTypeOptionDTO(
+                    value=model_type,
+                    label=model_type.value.upper(),
+                )
+            )
+        return options

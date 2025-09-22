@@ -17,6 +17,7 @@ from src.application.use_cases.model_use_cases import (
     DeleteModelUseCase,
     GetModelByIdUseCase,
     GetModelsUseCase,
+    GetModelTypesUseCase,
     UpdateModelUseCase,
 )
 from src.application.use_cases.training_management_use_case import (
@@ -90,6 +91,8 @@ class AppContainer(containers.DeclarativeContainer):
         model_repository=model_repository,
         training_job_repository=training_job_repository,
     )
+
+    get_model_types_use_case = providers.Factory(GetModelTypesUseCase)
 
     get_model_by_id_use_case = providers.Factory(
         GetModelByIdUseCase,

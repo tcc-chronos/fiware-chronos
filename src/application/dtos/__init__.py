@@ -10,6 +10,7 @@ from .model_dto import (
     ModelDetailResponseDTO,
     ModelResponseDTO,
     ModelTrainingSummaryDTO,
+    ModelTypeOptionDTO,
     ModelUpdateDTO,
 )
 
@@ -19,4 +20,5 @@ __all__ = [
     "ModelResponseDTO",
     "ModelDetailResponseDTO",
     "ModelTrainingSummaryDTO",
+    "ModelTypeOptionDTO",
 ]
