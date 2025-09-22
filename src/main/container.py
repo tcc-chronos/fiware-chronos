@@ -88,11 +88,13 @@ class AppContainer(containers.DeclarativeContainer):
     get_models_use_case = providers.Factory(
         GetModelsUseCase,
         model_repository=model_repository,
+        training_job_repository=training_job_repository,
     )
 
     get_model_by_id_use_case = providers.Factory(
         GetModelByIdUseCase,
         model_repository=model_repository,
+        training_job_repository=training_job_repository,
     )
 
     create_model_use_case = providers.Factory(
@@ -103,6 +105,7 @@ class AppContainer(containers.DeclarativeContainer):
     update_model_use_case = providers.Factory(
         UpdateModelUseCase,
         model_repository=model_repository,
+        training_job_repository=training_job_repository,
     )
 
     delete_model_use_case = providers.Factory(

@@ -11,7 +11,7 @@ from uuid import UUID
 import pymongo
 
 from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
-from src.domain.entities.model import Model, ModelStatus, ModelType, Training
+from src.domain.entities.model import Model, ModelStatus, ModelType
 from src.domain.repositories.model_repository import IModelRepository
 from src.infrastructure.database import MongoDatabase
 
@@ -56,36 +56,29 @@ class ModelRepository(IModelRepository):
             "early_stopping_patience": model.early_stopping_patience,
             "entity_type": model.entity_type,
             "entity_id": model.entity_id,
-            "model_artifact_id": model.model_artifact_id,
-            "x_scaler_artifact_id": model.x_scaler_artifact_id,
-            "y_scaler_artifact_id": model.y_scaler_artifact_id,
-            "metadata_artifact_id": model.metadata_artifact_id,
             "created_at": model.created_at,
             "updated_at": model.updated_at,
-            "metadata": model.metadata,
-            "trainings": [self._training_to_document(t) for t in model.trainings],
-        }
-
-    def _training_to_document(self, training: Training) -> Dict[str, Any]:
-        """Convert a Training entity to a MongoDB document."""
-        return {
-            "id": str(training.id),
-            "start_time": training.start_time,
-            "end_time": training.end_time,
-            "metrics": training.metrics,
-            "dataset_info": training.dataset_info,
-            "status": training.status,
-            "error": training.error,
+            "has_successful_training": model.has_successful_training,
         }
 
     def _to_entity(self, document: Dict[str, Any]) -> Model:
         """Convert a MongoDB document to a Model entity."""
+        status_value = document.get("status", ModelStatus.DRAFT.value)
+        try:
+            status = ModelStatus(status_value)
+        except ValueError:
+            status = (
+                ModelStatus.TRAINED
+                if status_value in {"ready", "trained"}
+                else ModelStatus.DRAFT
+            )
+
         return Model(
             id=UUID(document["id"]),
             name=document["name"],
             description=document.get("description"),
             model_type=ModelType(document["model_type"]),
-            status=ModelStatus(document["status"]),
+            status=status,
             rnn_dropout=document.get("rnn_dropout", 0.0),
             dense_dropout=document.get("dense_dropout", 0.2),
             batch_size=document["batch_size"],
@@ -100,28 +93,9 @@ class ModelRepository(IModelRepository):
             early_stopping_patience=document.get("early_stopping_patience"),
             entity_type=document.get("entity_type"),
             entity_id=document.get("entity_id"),
-            model_artifact_id=document.get("model_artifact_id"),
-            x_scaler_artifact_id=document.get("x_scaler_artifact_id"),
-            y_scaler_artifact_id=document.get("y_scaler_artifact_id"),
-            metadata_artifact_id=document.get("metadata_artifact_id"),
             created_at=document["created_at"],
             updated_at=document["updated_at"],
-            metadata=document.get("metadata", {}),
-            trainings=[
-                self._document_to_training(t) for t in document.get("trainings", [])
-            ],
-        )
-
-    def _document_to_training(self, document: Dict[str, Any]) -> Training:
-        """Convert a MongoDB document to a Training entity."""
-        return Training(
-            id=UUID(document["id"]),
-            start_time=document["start_time"],
-            end_time=document.get("end_time"),
-            metrics=document.get("metrics", {}),
-            dataset_info=document.get("dataset_info", {}),
-            status=document["status"],
-            error=document.get("error"),
+            has_successful_training=document.get("has_successful_training", False),
         )
 
     async def find_by_id(self, model_id: UUID) -> Optional[Model]:

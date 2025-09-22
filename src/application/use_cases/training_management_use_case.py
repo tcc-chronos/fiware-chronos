@@ -18,6 +18,7 @@ from src.application.dtos.training_dto import (
     TrainingMetricsDTO,
     TrainingRequestDTO,
 )
+from src.domain.entities.model import Model, ModelStatus
 from src.domain.entities.training_job import (
     DataCollectionStatus,
     TrainingJob,
@@ -73,11 +74,16 @@ class TrainingManagementUseCase:
         Raises:
             TrainingManagementError: When training cannot be started
         """
+        previous_status: Optional[ModelStatus] = None
+        model: Optional[Model] = None
+
         try:
             # Validate model exists
             model = await self.model_repository.find_by_id(model_id)
             if not model:
                 raise TrainingManagementError(f"Model {model_id} not found")
+
+            previous_status = model.status
 
             logger.info(
                 "Starting training job",
@@ -112,6 +118,10 @@ class TrainingManagementUseCase:
                     f"Model {model_id} already has a running training job: "
                     f"{running_jobs[0].id}"
                 )
+
+            model.status = ModelStatus.TRAINING
+            model.update_timestamp()
+            await self.model_repository.update(model)
 
             # Create new training job
             training_job = TrainingJob(
@@ -168,6 +178,24 @@ class TrainingManagementUseCase:
             )
 
         except Exception as e:
+            if "model" in locals() and model:
+                try:
+                    revert_status = previous_status or ModelStatus.DRAFT
+                    if (
+                        previous_status == ModelStatus.TRAINED
+                        and model.has_trained_artifacts()
+                    ):
+                        revert_status = ModelStatus.TRAINED
+
+                    model.status = revert_status
+                    model.update_timestamp()
+                    await self.model_repository.update(model)
+                except Exception as status_error:  # pragma: no cover - best effort
+                    logger.warning(
+                        "Failed to revert model status after training start error",
+                        model_id=str(model_id),
+                        error=str(status_error),
+                    )
             logger.error(
                 "Failed to start training", model_id=str(model_id), error=str(e)
             )
@@ -351,6 +379,16 @@ class TrainingManagementUseCase:
                 end_time=now,
             )
 
+            model = await self.model_repository.find_by_id(model_id)
+            if model:
+                model.status = (
+                    ModelStatus.TRAINED
+                    if model.has_trained_artifacts()
+                    else ModelStatus.DRAFT
+                )
+                model.update_timestamp()
+                await self.model_repository.update(model)
+
             celery_app.send_task(
                 "cleanup_training_tasks",
                 args=[str(training_job_id)],
@@ -460,6 +498,34 @@ class TrainingManagementUseCase:
                     "Training job deleted successfully",
                     training_job_id=str(training_job_id),
                 )
+
+                remaining_jobs = await self.training_job_repository.get_by_model_id(
+                    model_id
+                )
+
+                should_revert_model = False
+                if not remaining_jobs:
+                    should_revert_model = True
+                else:
+                    non_successful_statuses = {
+                        TrainingStatus.CANCELLED,
+                        TrainingStatus.FAILED,
+                    }
+                    should_revert_model = all(
+                        job.status in non_successful_statuses for job in remaining_jobs
+                    )
+
+                if should_revert_model:
+                    model_record = await self.model_repository.find_by_id(model_id)
+                    if model_record:
+                        model_record.clear_artifacts()
+                        model_record.status = ModelStatus.DRAFT
+                        model_record.update_timestamp()
+                        await self.model_repository.update(model_record)
+                        logger.info(
+                            "Model reverted to draft after deleting trainings",
+                            model_id=str(model_id),
+                        )
 
             return deleted
 

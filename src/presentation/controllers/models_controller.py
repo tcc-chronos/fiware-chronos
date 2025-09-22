@@ -6,6 +6,7 @@ This module defines the FastAPI router for model endpoints.
 
 from typing import List, Optional
 
+import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import UUID4
@@ -24,6 +25,8 @@ from src.application.use_cases.model_use_cases import (
     UpdateModelUseCase,
 )
 from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/models", tags=["Models"])
 
@@ -62,9 +65,10 @@ async def get_models(
             feature=feature,
         )
     except Exception as e:
+        logger.error("Failed to list models", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve models: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -87,9 +91,14 @@ async def get_model_by_id(
             detail=str(e),
         )
     except Exception as e:
+        logger.error(
+            "Failed to retrieve model",
+            model_id=str(model_id),
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve model: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -111,14 +120,16 @@ async def create_model(
     try:
         return await create_model_use_case.execute(model_dto=model_dto)
     except ModelOperationError as e:
+        logger.error("Failed to create model", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        logger.error("Unexpected error creating model", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create model: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -144,14 +155,24 @@ async def update_model(
             detail=str(e),
         )
     except ModelOperationError as e:
+        logger.error(
+            "Failed to update model",
+            model_id=str(model_id),
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        logger.error(
+            "Unexpected error updating model",
+            model_id=str(model_id),
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update model: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -174,12 +195,22 @@ async def delete_model(
             detail=str(e),
         )
     except ModelOperationError as e:
+        logger.error(
+            "Failed to delete model",
+            model_id=str(model_id),
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        logger.error(
+            "Unexpected error deleting model",
+            model_id=str(model_id),
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete model: {str(e)}",
+            detail="Internal server error",
         )

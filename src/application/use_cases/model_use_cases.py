@@ -11,8 +11,8 @@ from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
 
-from src.domain.entities.errors import ModelNotFoundError
-from src.domain.entities.model import Model
+from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
+from src.domain.entities.model import Model, ModelStatus
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
@@ -21,8 +21,8 @@ from ..dtos.model_dto import (
     ModelCreateDTO,
     ModelDetailResponseDTO,
     ModelResponseDTO,
+    ModelTrainingSummaryDTO,
     ModelUpdateDTO,
-    TrainingMetricsDTO,
 )
 
 
@@ -31,9 +31,14 @@ class GetModelsUseCase:
 
     @inject
     def __init__(
-        self, model_repository: IModelRepository = Provide["model_repository"]
+        self,
+        model_repository: IModelRepository = Provide["model_repository"],
+        training_job_repository: ITrainingJobRepository = Provide[
+            "training_job_repository"
+        ],
     ):
         self.model_repository = model_repository
+        self.training_job_repository = training_job_repository
 
     async def execute(
         self,
@@ -66,9 +71,37 @@ class GetModelsUseCase:
             entity_id=entity_id,
             feature=feature,
         )
-        return [self._to_response_dto(model) for model in models]
+        responses: List[ModelResponseDTO] = []
+        for model in models:
+            trainings = await self._get_training_summaries(model.id)
+            responses.append(self._to_response_dto(model, trainings))
+        return responses
 
-    def _to_response_dto(self, model: Model) -> ModelResponseDTO:
+    async def _get_training_summaries(
+        self, model_id: UUID
+    ) -> List[ModelTrainingSummaryDTO]:
+        training_jobs = await self.training_job_repository.get_by_model_id(model_id)
+        summaries: List[ModelTrainingSummaryDTO] = []
+        for job in sorted(training_jobs, key=lambda j: j.created_at, reverse=True):
+            summaries.append(
+                ModelTrainingSummaryDTO(
+                    id=job.id,
+                    status=job.status,
+                    start_time=job.start_time,
+                    end_time=job.end_time,
+                    error=job.error,
+                    data_collection_progress=job.get_data_collection_progress(),
+                    total_data_points_requested=job.total_data_points_requested,
+                    total_data_points_collected=job.total_data_points_collected,
+                    created_at=job.created_at,
+                    updated_at=job.updated_at,
+                )
+            )
+        return summaries
+
+    def _to_response_dto(
+        self, model: Model, trainings: List[ModelTrainingSummaryDTO]
+    ) -> ModelResponseDTO:
         """Convert a domain model to a response DTO."""
         return ModelResponseDTO(
             id=model.id,
@@ -92,7 +125,7 @@ class GetModelsUseCase:
             entity_id=model.entity_id,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            metadata=model.metadata,
+            trainings=trainings,
         )
 
 
@@ -101,9 +134,14 @@ class GetModelByIdUseCase:
 
     @inject
     def __init__(
-        self, model_repository: IModelRepository = Provide["model_repository"]
+        self,
+        model_repository: IModelRepository = Provide["model_repository"],
+        training_job_repository: ITrainingJobRepository = Provide[
+            "training_job_repository"
+        ],
     ):
         self.model_repository = model_repository
+        self.training_job_repository = training_job_repository
 
     async def execute(self, model_id: UUID) -> ModelDetailResponseDTO:
         """
@@ -122,19 +160,21 @@ class GetModelByIdUseCase:
         if not model:
             raise ModelNotFoundError(str(model_id))
 
-        return self._to_detail_response_dto(model)
-
-    def _to_detail_response_dto(self, model: Model) -> ModelDetailResponseDTO:
-        """Convert a domain model to a detailed response DTO."""
-        trainings = [
-            TrainingMetricsDTO(
-                id=training.id,
-                start_time=training.start_time,
-                end_time=training.end_time,
-                metrics=training.metrics,
-                status=training.status,
+        trainings = await self.training_job_repository.get_by_model_id(model_id)
+        training_summary = [
+            ModelTrainingSummaryDTO(
+                id=job.id,
+                status=job.status,
+                start_time=job.start_time,
+                end_time=job.end_time,
+                error=job.error,
+                data_collection_progress=job.get_data_collection_progress(),
+                total_data_points_requested=job.total_data_points_requested,
+                total_data_points_collected=job.total_data_points_collected,
+                created_at=job.created_at,
+                updated_at=job.updated_at,
             )
-            for training in model.trainings
+            for job in sorted(trainings, key=lambda j: j.created_at, reverse=True)
         ]
 
         return ModelDetailResponseDTO(
@@ -159,8 +199,7 @@ class GetModelByIdUseCase:
             entity_id=model.entity_id,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            metadata=model.metadata,
-            trainings=trainings,
+            trainings=training_summary,
         )
 
 
@@ -169,9 +208,14 @@ class CreateModelUseCase:
 
     @inject
     def __init__(
-        self, model_repository: IModelRepository = Provide["model_repository"]
+        self,
+        model_repository: IModelRepository = Provide["model_repository"],
+        training_job_repository: ITrainingJobRepository = Provide[
+            "training_job_repository"
+        ],
     ):
         self.model_repository = model_repository
+        self.training_job_repository = training_job_repository
 
     async def execute(self, model_dto: ModelCreateDTO) -> ModelResponseDTO:
         """
@@ -214,7 +258,6 @@ class CreateModelUseCase:
             early_stopping_patience=model_dto.early_stopping_patience,
             entity_type=model_dto.entity_type,
             entity_id=model_dto.entity_id,
-            metadata=model_dto.metadata,
         )
 
         # Save the model via repository
@@ -243,7 +286,7 @@ class CreateModelUseCase:
             entity_id=created_model.entity_id,
             created_at=created_model.created_at,
             updated_at=created_model.updated_at,
-            metadata=created_model.metadata,
+            trainings=[],
         )
 
 
@@ -252,9 +295,14 @@ class UpdateModelUseCase:
 
     @inject
     def __init__(
-        self, model_repository: IModelRepository = Provide["model_repository"]
+        self,
+        model_repository: IModelRepository = Provide["model_repository"],
+        training_job_repository: ITrainingJobRepository = Provide[
+            "training_job_repository"
+        ],
     ):
         self.model_repository = model_repository
+        self.training_job_repository = training_job_repository
 
     async def execute(
         self, model_id: UUID, model_dto: ModelUpdateDTO
@@ -277,12 +325,26 @@ class UpdateModelUseCase:
         if not model:
             raise ModelNotFoundError(str(model_id))
 
+        if model.status != ModelStatus.DRAFT:
+            raise ModelOperationError(
+                f"Model {model_id} cannot be edited since it is "
+                f"already in status {model.status.value}"
+            )
+
+        original_name = model.name or ""
+        original_description = model.description or ""
+        original_model_type = model.model_type
+        original_feature = model.feature
+
         # Update fields that are provided in the DTO
         if model_dto.name is not None:
             model.name = model_dto.name
 
         if model_dto.description is not None:
             model.description = model_dto.description
+
+        if model_dto.model_type is not None:
+            model.model_type = model_dto.model_type
 
         if model_dto.rnn_dropout is not None:
             model.rnn_dropout = model_dto.rnn_dropout
@@ -310,16 +372,6 @@ class UpdateModelUseCase:
 
         if model_dto.feature is not None:
             model.feature = model_dto.feature
-            if model_dto.name is None and model.name and "-" in model.name:
-                model.name = f"{model.model_type.value} - {model.feature}"
-            if (
-                model_dto.description is None
-                and model.description
-                and "forecasting" in model.description
-            ):
-                model.description = (
-                    f"{model.model_type.value} model for {model.feature} forecasting"
-                )
 
         if model_dto.rnn_units is not None:
             model.rnn_units = model_dto.rnn_units
@@ -336,15 +388,50 @@ class UpdateModelUseCase:
         if model_dto.entity_id is not None:
             model.entity_id = model_dto.entity_id
 
-        if model_dto.metadata is not None:
-            # Merge the existing metadata with the new metadata
-            model.metadata.update(model_dto.metadata)
+        # Update derived defaults when users did not provide overrides
+        default_name_before = f"{original_model_type.value} - {original_feature}"
+        default_description_before = (
+            f"{original_model_type.value} model for {original_feature} forecasting"
+        )
+
+        if (
+            model_dto.name is None
+            and original_name
+            and original_name == default_name_before
+        ):
+            model.name = f"{model.model_type.value} - {model.feature}"
+
+        if (
+            model_dto.description is None
+            and original_description
+            and original_description == default_description_before
+        ):
+            model.description = (
+                f"{model.model_type.value} model for {model.feature} forecasting"
+            )
 
         # Update timestamp
         model.update_timestamp()
 
         # Save the updated model
         updated_model = await self.model_repository.update(model)
+
+        training_jobs = await self.training_job_repository.get_by_model_id(model_id)
+        training_summary = [
+            ModelTrainingSummaryDTO(
+                id=job.id,
+                status=job.status,
+                start_time=job.start_time,
+                end_time=job.end_time,
+                error=job.error,
+                data_collection_progress=job.get_data_collection_progress(),
+                total_data_points_requested=job.total_data_points_requested,
+                total_data_points_collected=job.total_data_points_collected,
+                created_at=job.created_at,
+                updated_at=job.updated_at,
+            )
+            for job in sorted(training_jobs, key=lambda j: j.created_at, reverse=True)
+        ]
 
         # Convert to response DTO
         return ModelResponseDTO(
@@ -369,7 +456,7 @@ class UpdateModelUseCase:
             entity_id=updated_model.entity_id,
             created_at=updated_model.created_at,
             updated_at=updated_model.updated_at,
-            metadata=updated_model.metadata,
+            trainings=training_summary,
         )
 
 

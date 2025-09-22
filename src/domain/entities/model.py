@@ -9,7 +9,7 @@ without dependencies on external frameworks or infrastructure.
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID, uuid4
 
 
@@ -24,23 +24,8 @@ class ModelStatus(str, Enum):
     """Status of the model."""
 
     DRAFT = "draft"
-    READY = "ready"
     TRAINING = "training"
     TRAINED = "trained"
-    ERROR = "error"
-
-
-@dataclass
-class Training:
-    """Represents a training instance of a model."""
-
-    id: UUID = field(default_factory=uuid4)
-    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    end_time: Optional[datetime] = None
-    metrics: Dict[str, float] = field(default_factory=dict)
-    dataset_info: Dict[str, Any] = field(default_factory=dict)
-    status: str = "pending"
-    error: Optional[str] = None
 
 
 @dataclass
@@ -73,91 +58,20 @@ class Model:
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
 
-    # Model artifacts (GridFS file IDs)
-    model_artifact_id: Optional[str] = None
-    x_scaler_artifact_id: Optional[str] = None
-    y_scaler_artifact_id: Optional[str] = None
-    metadata_artifact_id: Optional[str] = None
-
     # Other attributes
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    trainings: List[Training] = field(default_factory=list)
+    has_successful_training: bool = False
 
     def update_timestamp(self) -> None:
         """Update the 'updated_at' timestamp to current time."""
         self.updated_at = datetime.now(timezone.utc)
 
-    def add_training(self, training: Training) -> None:
-        """Add a new training instance to this model."""
-        self.trainings.append(training)
-        self.update_timestamp()
-
-    def get_latest_training(self) -> Optional[Training]:
-        """Get the most recent training instance, if any."""
-        if not self.trainings:
-            return None
-        return sorted(self.trainings, key=lambda t: t.start_time, reverse=True)[0]
-
-    def get_best_training(
-        self, metric: str = "val_loss", higher_is_better: bool = False
-    ) -> Optional[Training]:
-        """
-        Get the best training instance based on a specific metric.
-
-        Args:
-            metric: The metric name to compare (default: val_loss)
-            higher_is_better: Whether higher metric values are better (default: False)
-
-        Returns:
-            The best training instance or None if no trainings exist
-        """
-        if not self.trainings:
-            return None
-
-        trainings_with_metric = [t for t in self.trainings if metric in t.metrics]
-        if not trainings_with_metric:
-            return None
-
-        if higher_is_better:
-            return max(trainings_with_metric, key=lambda t: t.metrics[metric])
-        else:
-            return min(trainings_with_metric, key=lambda t: t.metrics[metric])
-
-    def set_artifact_ids(
-        self,
-        model_artifact_id: Optional[str] = None,
-        x_scaler_artifact_id: Optional[str] = None,
-        y_scaler_artifact_id: Optional[str] = None,
-        metadata_artifact_id: Optional[str] = None,
-    ) -> None:
-        """Set the GridFS artifact IDs for the model components."""
-        if model_artifact_id is not None:
-            self.model_artifact_id = model_artifact_id
-        if x_scaler_artifact_id is not None:
-            self.x_scaler_artifact_id = x_scaler_artifact_id
-        if y_scaler_artifact_id is not None:
-            self.y_scaler_artifact_id = y_scaler_artifact_id
-        if metadata_artifact_id is not None:
-            self.metadata_artifact_id = metadata_artifact_id
-        self.update_timestamp()
-
     def has_trained_artifacts(self) -> bool:
-        """Check if the model has all required trained artifacts."""
-        return all(
-            [
-                self.model_artifact_id,
-                self.x_scaler_artifact_id,
-                self.y_scaler_artifact_id,
-                self.metadata_artifact_id,
-            ]
-        )
+        """Indicate whether the model has ever completed a successful training."""
+        return self.has_successful_training
 
     def clear_artifacts(self) -> None:
-        """Clear all artifact IDs (useful when retraining)."""
-        self.model_artifact_id = None
-        self.x_scaler_artifact_id = None
-        self.y_scaler_artifact_id = None
-        self.metadata_artifact_id = None
+        """Reset training flag when all trainings are removed."""
+        self.has_successful_training = False
         self.update_timestamp()

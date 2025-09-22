@@ -10,13 +10,12 @@ from .errors import (
     ModelOperationError,
     ModelValidationError,
 )
-from .model import Model, ModelStatus, ModelType, Training
+from .model import Model, ModelStatus, ModelType
 
 __all__ = [
     "Model",
     "ModelType",
     "ModelStatus",
-    "Training",
     "DomainError",
     "ModelNotFoundError",
     "ModelValidationError",

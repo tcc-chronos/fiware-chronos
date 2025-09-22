@@ -7,36 +7,42 @@ the presentation layer (API).
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.domain.entities.model import ModelStatus, ModelType
+from src.domain.entities.training_job import TrainingStatus
 
 
-class TrainingMetricsDTO(BaseModel):
-    """DTO for model training metrics."""
+class ModelTrainingSummaryDTO(BaseModel):
+    """Summary information about a training job for a model."""
 
     id: UUID
-    start_time: datetime
+    status: TrainingStatus
+    start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    metrics: Dict[str, float] = Field(default_factory=dict)
-    status: str
+    error: Optional[str] = None
+    data_collection_progress: float = 0.0
+    total_data_points_requested: int = 0
+    total_data_points_collected: int = 0
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {
         "json_schema_extra": {
             "example": {
                 "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "start_time": "2025-09-14T10:00:00Z",
-                "end_time": "2025-09-14T11:30:00Z",
-                "metrics": {
-                    "val_loss": 0.123,
-                    "val_mae": 0.345,
-                    "loss": 0.111,
-                    "mae": 0.222,
-                },
                 "status": "completed",
+                "start_time": "2025-09-21T16:00:00Z",
+                "end_time": "2025-09-21T16:30:00Z",
+                "error": None,
+                "data_collection_progress": 100.0,
+                "total_data_points_requested": 10000,
+                "total_data_points_collected": 10000,
+                "created_at": "2025-09-21T16:00:00Z",
+                "updated_at": "2025-09-21T16:30:00Z",
             }
         }
     }
@@ -98,11 +104,6 @@ class ModelCreateDTO(BaseModel):
     # FIWARE STH Comet configuration
     entity_type: Optional[str] = Field(None, description="Entity type in FIWARE")
     entity_id: Optional[str] = Field(None, description="Entity ID in FIWARE")
-
-    # Additional metadata
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata"
-    )
 
     @field_validator("name")
     @classmethod
@@ -189,6 +190,9 @@ class ModelUpdateDTO(BaseModel):
         None, description="Name of the model", min_length=1, max_length=100
     )
     description: Optional[str] = Field(None, description="Description of the model")
+    model_type: Optional[ModelType] = Field(
+        None, description="Type of model architecture"
+    )
 
     # Hyperparameters
     rnn_dropout: Optional[float] = Field(
@@ -234,9 +238,6 @@ class ModelUpdateDTO(BaseModel):
     # FIWARE STH Comet configuration
     entity_type: Optional[str] = Field(None, description="Entity type in FIWARE")
     entity_id: Optional[str] = Field(None, description="Entity ID in FIWARE")
-
-    # Additional metadata
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
     @field_validator("rnn_units")
     @classmethod
@@ -317,10 +318,9 @@ class ModelResponseDTO(BaseModel):
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
 
-    # Metadata
     created_at: datetime
     updated_at: datetime
-    metadata: Dict[str, Any]
+    trainings: List[ModelTrainingSummaryDTO] = Field(default_factory=list)
 
     model_config = {
         "json_schema_extra": {
@@ -346,51 +346,26 @@ class ModelResponseDTO(BaseModel):
                 "entity_id": "urn:ngsi-ld:Chronos:ESP32:001",
                 "created_at": "2025-09-14T10:00:00Z",
                 "updated_at": "2025-09-14T10:00:00Z",
-                "metadata": {},
+                "trainings": [
+                    {
+                        "id": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
+                        "status": "completed",
+                        "start_time": "2025-09-14T11:00:00Z",
+                        "end_time": "2025-09-14T12:30:00Z",
+                        "error": None,
+                        "data_collection_progress": 100.0,
+                        "total_data_points_requested": 10000,
+                        "total_data_points_collected": 10000,
+                        "created_at": "2025-09-14T11:00:00Z",
+                        "updated_at": "2025-09-14T12:30:00Z",
+                    }
+                ],
             }
         }
     }
 
 
 class ModelDetailResponseDTO(ModelResponseDTO):
-    """DTO for detailed model response with training metrics."""
+    """DTO for detailed model response."""
 
-    trainings: List[TrainingMetricsDTO] = Field(default_factory=list)
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "name": "Temperature Forecasting Model",
-                "description": "LSTM model for temperature forecasting",
-                "model_type": "lstm",
-                "status": "trained",
-                "rnn_dropout": 0.0,
-                "dense_dropout": 0.2,
-                "batch_size": 32,
-                "epochs": 100,
-                "learning_rate": 0.001,
-                "validation_split": 0.2,
-                "rnn_units": [128, 64],
-                "dense_units": [64, 32],
-                "early_stopping_patience": 10,
-                "lookback_window": 24,
-                "forecast_horizon": 6,
-                "feature": "temperature",
-                "entity_type": "Sensor",
-                "entity_id": "urn:ngsi-ld:Chronos:ESP32:001",
-                "created_at": "2025-09-14T10:00:00Z",
-                "updated_at": "2025-09-14T12:30:00Z",
-                "metadata": {},
-                "trainings": [
-                    {
-                        "id": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
-                        "start_time": "2025-09-14T11:00:00Z",
-                        "end_time": "2025-09-14T12:30:00Z",
-                        "metrics": {"val_loss": 0.123, "val_mae": 0.345},
-                        "status": "completed",
-                    }
-                ],
-            }
-        }
-    }
+    model_config = ModelResponseDTO.model_config

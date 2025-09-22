@@ -18,6 +18,7 @@ from uuid import UUID
 import structlog
 from celery import Task
 
+from src.domain.entities.model import ModelStatus
 from src.domain.entities.training_job import DataCollectionStatus, TrainingStatus
 from src.infrastructure.services.celery_config import celery_app
 
@@ -353,6 +354,29 @@ def train_model_task(
     Returns:
         Dictionary with training results
     """
+    model_repo = None
+    training_job_repo = None
+
+    def set_model_status(status: "ModelStatus", allow_downgrade: bool = True) -> None:
+        if not existing_job or not existing_job.model_id or model_repo is None:
+            return
+        model_id = existing_job.model_id
+        if model_id is None:
+            return
+        model_record = asyncio.run(model_repo.find_by_id(model_id))
+        if not model_record:
+            return
+        if (
+            status != ModelStatus.TRAINED
+            and model_record.has_trained_artifacts()
+            and not allow_downgrade
+        ):
+            return
+
+        model_record.status = status
+        model_record.update_timestamp()
+        asyncio.run(model_repo.update(model_record))
+
     try:
         logger.info(
             "Starting model training",
@@ -363,11 +387,12 @@ def train_model_task(
 
         # Import here to avoid circular imports
         from src.application.dtos.training_dto import CollectedDataDTO
-        from src.domain.entities.model import Model, ModelType
+        from src.domain.entities.model import Model, ModelStatus, ModelType
         from src.infrastructure.database.mongo_database import MongoDatabase
         from src.infrastructure.repositories.gridfs_model_artifacts_repository import (
             GridFSModelArtifactsRepository,
         )
+        from src.infrastructure.repositories.model_repository import ModelRepository
         from src.infrastructure.repositories.training_job_repository import (
             TrainingJobRepository,
         )
@@ -382,6 +407,7 @@ def train_model_task(
             db_name=settings.database.database_name,
         )
         training_job_repo = TrainingJobRepository(database)
+        model_repo = ModelRepository(database)
 
         # Initialize GridFS artifacts repository
         artifacts_repo = GridFSModelArtifactsRepository(
@@ -397,6 +423,7 @@ def train_model_task(
         model_training = ModelTrainingUseCase(artifacts_repository=artifacts_repo)
 
         existing_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+
         if existing_job and existing_job.status in (
             TrainingStatus.CANCELLED,
             TrainingStatus.CANCEL_REQUESTED,
@@ -405,6 +432,7 @@ def train_model_task(
                 "Training job already cancelled before model training",
                 training_job_id=training_job_id,
             )
+            set_model_status(ModelStatus.DRAFT, allow_downgrade=False)
             return {
                 "training_job_id": training_job_id,
                 "status": "cancelled",
@@ -473,6 +501,7 @@ def train_model_task(
                     training_end=datetime.now(timezone.utc),
                 )
             )
+            set_model_status(ModelStatus.DRAFT, allow_downgrade=False)
             return {
                 "training_job_id": training_job_id,
                 "status": "failed",
@@ -524,6 +553,13 @@ def train_model_task(
             asyncio.run(
                 training_job_repo.update_task_refs(UUID(training_job_id), clear=True)
             )
+            if existing_job and existing_job.model_id:
+                model_record = asyncio.run(model_repo.find_by_id(existing_job.model_id))
+                if model_record:
+                    model_record.status = ModelStatus.TRAINED
+                    model_record.has_successful_training = True
+                    model_record.update_timestamp()
+                    asyncio.run(model_repo.update(model_record))
 
         logger.info(
             "celery.training.completed",
@@ -542,6 +578,9 @@ def train_model_task(
         }
 
     except Exception as exc:
+        from src.domain.entities.model import ModelStatus
+
+        set_model_status(ModelStatus.DRAFT, allow_downgrade=False)
         logger.error(
             "celery.training.failed",
             training_job_id=training_job_id,
@@ -920,8 +959,28 @@ def process_collected_data(
     reorders data chronologically, and initiates model training.
     """
     training_job_repo = None
+
+    def revert_model_to_draft() -> None:
+        if training_job_repo is None or model_repo is None:
+            return
+        training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
+        if not training_job or not training_job.model_id:
+            return
+        model_record = asyncio.run(model_repo.find_by_id(training_job.model_id))
+        if not model_record:
+            return
+        if (
+            model_record.status == ModelStatus.TRAINED
+            and model_record.has_trained_artifacts()
+        ):
+            return
+        model_record.status = ModelStatus.DRAFT
+        model_record.update_timestamp()
+        asyncio.run(model_repo.update(model_record))
+
     try:
         from src.infrastructure.database.mongo_database import MongoDatabase
+        from src.infrastructure.repositories.model_repository import ModelRepository
         from src.infrastructure.repositories.training_job_repository import (
             TrainingJobRepository,
         )
@@ -933,6 +992,7 @@ def process_collected_data(
             db_name=settings.database.database_name,
         )
         training_job_repo = TrainingJobRepository(database)
+        model_repo = ModelRepository(database)
 
         training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
         if training_job and training_job.status in (
@@ -943,6 +1003,7 @@ def process_collected_data(
                 "Skipping data processing because training job was cancelled",
                 training_job_id=training_job_id,
             )
+            revert_model_to_draft()
             return {
                 "training_job_id": training_job_id,
                 "status": "cancelled",
@@ -1081,6 +1142,7 @@ def process_collected_data(
             error=str(exc),
             exc_info=exc,
         )
+        revert_model_to_draft()
 
         try:
             if training_job_repo is not None:

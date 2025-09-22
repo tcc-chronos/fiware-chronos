@@ -9,8 +9,8 @@ from .model_dto import (
     ModelCreateDTO,
     ModelDetailResponseDTO,
     ModelResponseDTO,
+    ModelTrainingSummaryDTO,
     ModelUpdateDTO,
-    TrainingMetricsDTO,
 )
 
 __all__ = [
@@ -18,5 +18,5 @@ __all__ = [
     "ModelUpdateDTO",
     "ModelResponseDTO",
     "ModelDetailResponseDTO",
-    "TrainingMetricsDTO",
+    "ModelTrainingSummaryDTO",
 ]
