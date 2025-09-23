@@ -19,7 +19,7 @@ class TrainingRequestDTO(BaseModel):
 
     last_n: int = Field(
         default=1000,
-        ge=100,
+        ge=0,
         le=1000000,
         description="Number of most recent data points to collect for training",
     )

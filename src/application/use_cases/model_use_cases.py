@@ -23,6 +23,7 @@ from src.domain.entities.training_job import TrainingMetrics
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
+from src.domain.services import validate_model_configuration
 
 from ..dtos.model_dto import (
     DenseLayerDTO,
@@ -310,6 +311,8 @@ class CreateModelUseCase:
             entity_id=model_dto.entity_id,
         )
 
+        validate_model_configuration(model)
+
         # Save the model via repository
         created_model = await self.model_repository.create(model)
 
@@ -448,6 +451,8 @@ class UpdateModelUseCase:
         legacy_default_description = (
             f"{original_model_type.value} model for {original_feature} forecasting"
         )
+
+        validate_model_configuration(model)
 
         if (
             model_dto.name is None

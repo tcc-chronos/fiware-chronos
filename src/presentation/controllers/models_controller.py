@@ -26,7 +26,11 @@ from src.application.use_cases.model_use_cases import (
     GetModelTypesUseCase,
     UpdateModelUseCase,
 )
-from src.domain.entities.errors import ModelNotFoundError, ModelOperationError
+from src.domain.entities.errors import (
+    ModelNotFoundError,
+    ModelOperationError,
+    ModelValidationError,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -151,6 +155,13 @@ async def create_model(
                 ],
             )
         return await create_model_use_case.execute(model_dto=model_dto)
+    except ModelValidationError as e:
+        logger.error("Failed to create model", error=str(e), details=e.details)
+        detail = {"message": e.message, **e.details} if e.details else str(e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail,
+        )
     except ModelOperationError as e:
         logger.error("Failed to create model", error=str(e))
         raise HTTPException(
@@ -198,6 +209,18 @@ async def update_model(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
+        )
+    except ModelValidationError as e:
+        logger.error(
+            "Failed to update model",
+            model_id=str(model_id),
+            error=str(e),
+            details=e.details,
+        )
+        detail = {"message": e.message, **e.details} if e.details else str(e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail,
         )
     except ModelOperationError as e:
         logger.error(

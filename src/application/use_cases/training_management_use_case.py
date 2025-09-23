@@ -18,6 +18,7 @@ from src.application.dtos.training_dto import (
     TrainingMetricsDTO,
     TrainingRequestDTO,
 )
+from src.domain.entities.errors import ModelValidationError
 from src.domain.entities.model import Model, ModelStatus
 from src.domain.entities.training_job import (
     DataCollectionStatus,
@@ -27,6 +28,9 @@ from src.domain.entities.training_job import (
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
+from src.domain.services import validate_model_configuration
+from src.infrastructure.gateways.sth_comet_gateway import STHCometGateway
+from src.main.config import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -96,6 +100,55 @@ class TrainingManagementUseCase:
             if not model.entity_type or not model.entity_id or not model.feature:
                 raise TrainingManagementError(
                     "Model must have entity_type, entity_id, and feature configured"
+                )
+
+            try:
+                validate_model_configuration(model)
+            except ModelValidationError as exc:
+                raise TrainingManagementError(
+                    f"Model configuration invalid: {exc.message}"
+                ) from exc
+
+            min_required_points = model.lookback_window + model.forecast_horizon
+            if request.last_n < min_required_points:
+                raise TrainingManagementError(
+                    "Requested data window is too small for the configured lookback "
+                    f"window. Provide at least {min_required_points} points for "
+                    f"lookback_window={model.lookback_window} and "
+                    f"forecast_horizon={model.forecast_horizon}."
+                )
+
+            settings = get_settings()
+            sth_gateway = STHCometGateway(settings.fiware.sth_url)
+            try:
+                total_available = await sth_gateway.get_total_count_from_header(
+                    entity_type=model.entity_type,
+                    entity_id=model.entity_id,
+                    attribute=model.feature,
+                    fiware_service="smart",
+                    fiware_servicepath="/",
+                )
+            except Exception as exc:
+                raise TrainingManagementError(
+                    f"Failed to validate STH-Comet availability: {exc}"
+                ) from exc
+
+            if total_available <= 0:
+                raise TrainingManagementError(
+                    "No data available in STH-Comet for the configured entity/feature."
+                )
+
+            if total_available < min_required_points:
+                raise TrainingManagementError(
+                    "Insufficient historical data for training. "
+                    f"Required at least {min_required_points} points but only "
+                    f"{total_available} are available."
+                )
+
+            if request.last_n > total_available:
+                raise TrainingManagementError(
+                    f"Requested {request.last_n} data points but only "
+                    f"{total_available} are available in STH-Comet."
                 )
 
             # Check for existing running training jobs
