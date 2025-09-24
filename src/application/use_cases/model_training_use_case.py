@@ -114,6 +114,8 @@ class ModelTrainingUseCase:
                 window_size=window_size,
                 target_column="value",  # Use "value" as the consistent column name
                 feature_columns=["value"],  # Use "value" for consistency
+                validation_ratio=model_config.validation_ratio,
+                test_ratio=model_config.test_ratio,
             )
 
             logger.info(
@@ -176,6 +178,8 @@ class ModelTrainingUseCase:
                     "train_sequences": len(x_train),
                     "val_sequences": len(x_val),
                     "test_sequences": len(x_test),
+                    "validation_ratio": model_config.validation_ratio,
+                    "test_ratio": model_config.test_ratio,
                 },
                 training_job_id=training_job_id,
             )
@@ -244,6 +248,21 @@ class ModelTrainingUseCase:
             layer.dropout < 0 or layer.dropout >= 1 for layer in config.dense_layers
         ):
             raise ModelTrainingError("Dense layer dropout must be between 0 and 1")
+
+        if not 0.0 < config.validation_ratio < 1.0:
+            raise ModelTrainingError(
+                "Validation ratio must be between 0 (exclusive) and 1 (exclusive)."
+            )
+
+        if not 0.0 < config.test_ratio < 1.0:
+            raise ModelTrainingError(
+                "Test ratio must be between 0 (exclusive) and 1 (exclusive)."
+            )
+
+        if config.validation_ratio + config.test_ratio >= 1.0:
+            raise ModelTrainingError(
+                "The sum of validation and test ratios must be less than 1."
+            )
 
         if config.learning_rate <= 0:
             raise ModelTrainingError("Learning rate must be positive")
@@ -505,7 +524,8 @@ class ModelTrainingUseCase:
                     "batch_size": model_config.batch_size,
                     "epochs": model_config.epochs,
                     "learning_rate": model_config.learning_rate,
-                    "validation_split": model_config.validation_split,
+                    "validation_ratio": model_config.validation_ratio,
+                    "test_ratio": model_config.test_ratio,
                     "lookback_window": model_config.lookback_window,
                     "forecast_horizon": model_config.forecast_horizon,
                 },

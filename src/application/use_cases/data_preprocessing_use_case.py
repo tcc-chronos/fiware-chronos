@@ -54,6 +54,8 @@ class DataPreprocessingUseCase:
         window_size: int,
         target_column: str = "value",
         feature_columns: Optional[List[str]] = None,
+        validation_ratio: Optional[float] = None,
+        test_ratio: Optional[float] = None,
     ) -> Tuple[
         np.ndarray,
         np.ndarray,
@@ -86,6 +88,33 @@ class DataPreprocessingUseCase:
             data_points=len(collected_data),
             window_size=window_size,
             target_column=target_column,
+        )
+
+        val_ratio = (
+            self.val_size if validation_ratio is None else float(validation_ratio)
+        )
+        test_ratio_value = self.test_size if test_ratio is None else float(test_ratio)
+
+        if not 0.0 < val_ratio < 1.0:
+            raise ValueError(
+                "Validation ratio must be between 0 (exclusive) and 1 (exclusive)."
+            )
+        if not 0.0 < test_ratio_value < 1.0:
+            raise ValueError(
+                "Test ratio must be between 0 (exclusive) and 1 (exclusive)."
+            )
+
+        train_ratio = 1.0 - val_ratio - test_ratio_value
+        if train_ratio <= 0.0:
+            raise ValueError(
+                "The sum of validation and test ratios must be less than 1."
+            )
+
+        logger.info(
+            "Using data split ratios",
+            train_ratio=train_ratio,
+            validation_ratio=val_ratio,
+            test_ratio=test_ratio_value,
         )
 
         # Convert to DataFrame
@@ -132,7 +161,7 @@ class DataPreprocessingUseCase:
 
         # Temporal split (maintaining order)
         # First separate test set from the end
-        n_test = max(1, int(np.floor(self.test_size * n)))
+        n_test = max(1, int(np.floor(test_ratio_value * n)))
         n_trainval = n - n_test
 
         if n_trainval <= window_size + 2:
@@ -145,7 +174,10 @@ class DataPreprocessingUseCase:
         y_trainval, y_test = y_raw[:n_trainval], y_raw[n_trainval:]
 
         # Within trainval, separate validation from the end
-        n_val = max(1, int(np.floor(self.val_size * n)))
+        n_val = max(1, int(np.floor(val_ratio * n)))
+        if n_val >= n_trainval:
+            n_val = max(1, n_trainval - 1)
+
         n_train = n_trainval - n_val
 
         if n_train <= window_size + 1:

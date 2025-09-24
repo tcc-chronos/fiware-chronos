@@ -51,7 +51,8 @@ class ModelRepository(IModelRepository):
             "batch_size": model.batch_size,
             "epochs": model.epochs,
             "learning_rate": model.learning_rate,
-            "validation_split": model.validation_split,
+            "validation_ratio": model.validation_ratio,
+            "test_ratio": model.test_ratio,
             "lookback_window": model.lookback_window,
             "forecast_horizon": model.forecast_horizon,
             "feature": model.feature,
@@ -143,6 +144,21 @@ class ModelRepository(IModelRepository):
         if not rnn_layers:
             rnn_layers = [RNNLayerConfig(units=64)]
 
+        raw_validation_ratio = document.get(
+            "validation_ratio", document.get("validation_split", 0.15)
+        )
+        raw_test_ratio = document.get("test_ratio", 0.15)
+
+        try:
+            validation_ratio = float(raw_validation_ratio)
+        except (TypeError, ValueError):
+            validation_ratio = 0.15
+
+        try:
+            test_ratio = float(raw_test_ratio)
+        except (TypeError, ValueError):
+            test_ratio = 0.15
+
         return Model(
             id=UUID(document["id"]),
             name=document["name"],
@@ -152,7 +168,8 @@ class ModelRepository(IModelRepository):
             batch_size=document["batch_size"],
             epochs=document["epochs"],
             learning_rate=document["learning_rate"],
-            validation_split=document["validation_split"],
+            validation_ratio=validation_ratio,
+            test_ratio=test_ratio,
             lookback_window=document["lookback_window"],
             forecast_horizon=document["forecast_horizon"],
             feature=document.get("feature") or "",

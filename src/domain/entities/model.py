@@ -60,7 +60,8 @@ class Model:
     batch_size: int = 32
     epochs: int = 100
     learning_rate: float = 0.001
-    validation_split: float = 0.2
+    validation_ratio: float = 0.15
+    test_ratio: float = 0.15
     rnn_layers: List[RNNLayerConfig] = field(
         default_factory=lambda: [RNNLayerConfig(units=64)]
     )

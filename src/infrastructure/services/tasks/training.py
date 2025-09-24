@@ -163,6 +163,8 @@ def train_model_task(
         model.epochs = int(model_config["epochs"])
         model.early_stopping_patience = model_config.get("early_stopping_patience")
         model.feature = str(model_config["feature"])
+        model.validation_ratio = float(model_config.get("validation_ratio", 0.15))
+        model.test_ratio = float(model_config.get("test_ratio", 0.15))
         model.entity_type = str(model_config.get("entity_type", ""))
         model.entity_id = str(model_config.get("entity_id", ""))
 

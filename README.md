@@ -264,7 +264,8 @@ Hiperparâmetros:
 - `batch_size`: Tamanho do batch para treinamento
 - `epochs`: Número de épocas de treinamento
 - `learning_rate`: Taxa de aprendizado
-- `validation_split`: Proporção de dados para validação
+- `validation_ratio`: Proporção de dados reservada para validação
+- `test_ratio`: Proporção de dados reservada para teste
 - `rnn_units`: Lista de unidades para cada camada RNN (obrigatório ter pelo menos um valor positivo)
 - `dense_units`: Lista de unidades para cada camada densa
 - `bidirectional`: Se deve usar camadas RNN bidirecionais

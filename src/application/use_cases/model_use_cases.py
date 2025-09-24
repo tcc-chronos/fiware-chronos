@@ -166,7 +166,8 @@ class GetModelsUseCase:
             batch_size=model.batch_size,
             epochs=model.epochs,
             learning_rate=model.learning_rate,
-            validation_split=model.validation_split,
+            validation_ratio=model.validation_ratio,
+            test_ratio=model.test_ratio,
             lookback_window=model.lookback_window,
             forecast_horizon=model.forecast_horizon,
             feature=model.feature,
@@ -239,7 +240,8 @@ class GetModelByIdUseCase:
             batch_size=model.batch_size,
             epochs=model.epochs,
             learning_rate=model.learning_rate,
-            validation_split=model.validation_split,
+            validation_ratio=model.validation_ratio,
+            test_ratio=model.test_ratio,
             lookback_window=model.lookback_window,
             forecast_horizon=model.forecast_horizon,
             feature=model.feature,
@@ -298,7 +300,8 @@ class CreateModelUseCase:
             batch_size=model_dto.batch_size,
             epochs=model_dto.epochs,
             learning_rate=model_dto.learning_rate,
-            validation_split=model_dto.validation_split,
+            validation_ratio=model_dto.validation_ratio,
+            test_ratio=model_dto.test_ratio,
             lookback_window=model_dto.lookback_window,
             forecast_horizon=model_dto.forecast_horizon,
             feature=model_dto.feature,
@@ -326,7 +329,8 @@ class CreateModelUseCase:
             batch_size=created_model.batch_size,
             epochs=created_model.epochs,
             learning_rate=created_model.learning_rate,
-            validation_split=created_model.validation_split,
+            validation_ratio=created_model.validation_ratio,
+            test_ratio=created_model.test_ratio,
             lookback_window=created_model.lookback_window,
             forecast_horizon=created_model.forecast_horizon,
             feature=created_model.feature,
@@ -408,8 +412,11 @@ class UpdateModelUseCase:
         if model_dto.learning_rate is not None:
             model.learning_rate = model_dto.learning_rate
 
-        if model_dto.validation_split is not None:
-            model.validation_split = model_dto.validation_split
+        if model_dto.validation_ratio is not None:
+            model.validation_ratio = model_dto.validation_ratio
+
+        if model_dto.test_ratio is not None:
+            model.test_ratio = model_dto.test_ratio
 
         if model_dto.lookback_window is not None:
             model.lookback_window = model_dto.lookback_window
@@ -505,7 +512,8 @@ class UpdateModelUseCase:
             batch_size=updated_model.batch_size,
             epochs=updated_model.epochs,
             learning_rate=updated_model.learning_rate,
-            validation_split=updated_model.validation_split,
+            validation_ratio=updated_model.validation_ratio,
+            test_ratio=updated_model.test_ratio,
             lookback_window=updated_model.lookback_window,
             forecast_horizon=updated_model.forecast_horizon,
             feature=updated_model.feature,

@@ -5,6 +5,7 @@ This module contains use cases for managing training jobs.
 """
 
 from datetime import datetime, timezone
+from math import ceil
 from typing import List, Optional
 from uuid import UUID
 
@@ -109,14 +110,28 @@ class TrainingManagementUseCase:
                     f"Model configuration invalid: {exc.message}"
                 ) from exc
 
-            min_required_points = model.lookback_window + model.forecast_horizon
-            if request.last_n < min_required_points:
+            train_ratio = 1.0 - model.validation_ratio - model.test_ratio
+            if train_ratio <= 0.0:
                 raise TrainingManagementError(
-                    "Requested data window is too small for the configured lookback "
-                    f"window. Provide at least {min_required_points} points for "
-                    f"lookback_window={model.lookback_window} and "
-                    f"forecast_horizon={model.forecast_horizon}."
+                    "Validation and test ratios leave no data for training."
                 )
+
+            base_min = model.lookback_window + model.forecast_horizon
+            dynamic_min = int(
+                ceil((model.lookback_window + model.forecast_horizon + 2) / train_ratio)
+            )
+            min_required_points = max(base_min, dynamic_min)
+
+            if request.last_n < min_required_points:
+                message = (
+                    "Requested data window is too small for the configured "
+                    "lookback window and data splits. Provide at least "
+                    f"{min_required_points} points for lookback_window="
+                    f"{model.lookback_window}, forecast_horizon="
+                    f"{model.forecast_horizon}, validation_ratio="
+                    f"{model.validation_ratio}, and test_ratio={model.test_ratio}."
+                )
+                raise TrainingManagementError(message)
 
             settings = get_settings()
             sth_gateway = STHCometGateway(settings.fiware.sth_url)

@@ -126,8 +126,11 @@ class ModelCreateDTO(BaseModel):
     learning_rate: float = Field(
         default=0.001, description="Learning rate", gt=0.0, le=1.0
     )
-    validation_split: float = Field(
-        default=0.2, description="Validation split ratio", ge=0.0, lt=1.0
+    validation_ratio: float = Field(
+        default=0.15, description="Validation data ratio", gt=0.0, lt=1.0
+    )
+    test_ratio: float = Field(
+        default=0.15, description="Test data ratio", gt=0.0, lt=1.0
     )
     rnn_layers: List[RNNLayerDTO] = Field(
         ...,
@@ -197,6 +200,9 @@ class ModelCreateDTO(BaseModel):
         # Smart default: around 10% of epochs, minimum 5, maximum 20
         epochs = self.epochs
         self.early_stopping_patience = min(max(int(epochs * 0.1), 5), 20)
+
+        if self.validation_ratio + self.test_ratio >= 1.0:
+            raise ValueError("validation_ratio + test_ratio must be less than 1.0")
         return self
 
     model_config = {
@@ -208,6 +214,8 @@ class ModelCreateDTO(BaseModel):
                 "batch_size": 32,
                 "epochs": 100,
                 "learning_rate": 0.001,
+                "validation_ratio": 0.15,
+                "test_ratio": 0.15,
                 "lookback_window": 24,
                 "forecast_horizon": 6,
                 "feature": "temperature",
@@ -248,8 +256,11 @@ class ModelUpdateDTO(BaseModel):
     learning_rate: Optional[float] = Field(
         None, description="Learning rate", gt=0.0, le=1.0
     )
-    validation_split: Optional[float] = Field(
-        None, description="Validation split ratio", ge=0.0, lt=1.0
+    validation_ratio: Optional[float] = Field(
+        None, description="Validation data ratio", gt=0.0, lt=1.0
+    )
+    test_ratio: Optional[float] = Field(
+        None, description="Test data ratio", gt=0.0, lt=1.0
     )
     rnn_layers: Optional[List[RNNLayerDTO]] = Field(
         None,
@@ -331,7 +342,8 @@ class ModelResponseDTO(BaseModel):
     batch_size: int
     epochs: int
     learning_rate: float
-    validation_split: float
+    validation_ratio: float
+    test_ratio: float
     rnn_layers: List[RNNLayerDTO]
     dense_layers: List[DenseLayerDTO]
     early_stopping_patience: Optional[int] = None
@@ -360,7 +372,8 @@ class ModelResponseDTO(BaseModel):
                 "batch_size": 32,
                 "epochs": 100,
                 "learning_rate": 0.001,
-                "validation_split": 0.2,
+                "validation_ratio": 0.15,
+                "test_ratio": 0.15,
                 "rnn_layers": [
                     {"units": 128, "dropout": 0.1, "recurrent_dropout": 0.0},
                     {"units": 64, "dropout": 0.2, "recurrent_dropout": 0.05},

@@ -57,9 +57,14 @@ def validate_model_configuration(model: Model) -> None:
         errors.append("Number of epochs must be greater than 0.")
     if not 0.0 < model.learning_rate <= 1.0:
         errors.append("Learning rate must be greater than 0 and at most 1.")
-    if not 0.0 <= model.validation_split < 1.0:
+    if not 0.0 < model.validation_ratio < 1.0:
+        errors.append("Validation ratio must be between 0 and 1 (exclusive).")
+    if not 0.0 < model.test_ratio < 1.0:
+        errors.append("Test ratio must be between 0 and 1 (exclusive).")
+    if model.validation_ratio + model.test_ratio >= 1.0:
         errors.append(
-            "Validation split must be between 0 (inclusive) and 1 (exclusive)."
+            "The sum of validation and test ratios must be less than 1, "
+            "leaving data for training."
         )
     if model.lookback_window <= 0:
         errors.append("Lookback window must be greater than 0.")

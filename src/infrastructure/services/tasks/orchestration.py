@@ -190,6 +190,8 @@ def orchestrate_training(
                     "batch_size": model.batch_size,
                     "epochs": model.epochs,
                     "early_stopping_patience": model.early_stopping_patience,
+                    "validation_ratio": model.validation_ratio,
+                    "test_ratio": model.test_ratio,
                     "feature": model.feature,
                     "entity_type": model.entity_type,
                     "entity_id": model.entity_id,
