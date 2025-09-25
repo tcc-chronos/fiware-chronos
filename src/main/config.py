@@ -8,7 +8,7 @@ environment variables, .env files and default values.
 
 from typing import Optional
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.shared import EnumEnvironment, EnumLogLevel
@@ -40,8 +40,16 @@ class GESettings(BaseSettings):
         description="GE description",
     )
     version: str = Field(default="1.0.0", description="GE version")
-    git_commit: str = Field(default="unknown", description="Git commit hash")
-    build_time: str = Field(default="unknown", description="Build timestamp")
+    git_commit: str = Field(
+        default="unknown",
+        description="Git commit hash",
+        validation_alias=AliasChoices("GE_GIT_COMMIT", "GIT_COMMIT"),
+    )
+    build_time: str = Field(
+        default="unknown",
+        description="Build timestamp",
+        validation_alias=AliasChoices("GE_BUILD_TIME", "BUILD_TIME"),
+    )
     debug: bool = Field(default=False, description="Enable debug mode")
     port: int = Field(default=8000, description="Port to bind the server")
     reload: bool = Field(

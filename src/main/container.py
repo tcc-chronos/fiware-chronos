@@ -11,6 +11,10 @@ from contextlib import asynccontextmanager
 from dependency_injector import containers, providers
 
 from src.application.use_cases.device_use_cases import GetDevicesUseCase
+from src.application.use_cases.health_use_cases import (
+    GetApplicationInfoUseCase,
+    GetHealthStatusUseCase,
+)
 from src.application.use_cases.model_training_use_case import ModelTrainingUseCase
 from src.application.use_cases.model_use_cases import (
     CreateModelUseCase,
@@ -33,6 +37,7 @@ from src.infrastructure.repositories.model_repository import ModelRepository
 from src.infrastructure.repositories.training_job_repository import (
     TrainingJobRepository,
 )
+from src.infrastructure.services.health_check_service import HealthCheckService
 from src.shared import get_logger
 
 from .config import AppSettings
@@ -49,6 +54,7 @@ class AppContainer(containers.DeclarativeContainer):
 
     # Settings
     config = providers.Configuration()
+    app_settings = providers.Dependency(instance_of=AppSettings)
 
     # Infrastructure
     mongo_database = providers.Singleton(
@@ -123,6 +129,27 @@ class AppContainer(containers.DeclarativeContainer):
         iot_agent_gateway=iot_agent_gateway,
     )
 
+    health_check_service = providers.Singleton(
+        HealthCheckService,
+        mongo_database=mongo_database,
+        broker_url=config.celery.broker_url,
+        redis_url=config.celery.result_backend_url,
+        orion_url=config.fiware.orion_url,
+        iot_agent_url=config.fiware.iot_agent_url,
+        sth_comet_url=config.fiware.sth_url,
+    )
+
+    get_health_status_use_case = providers.Factory(
+        GetHealthStatusUseCase,
+        health_check_service=health_check_service,
+    )
+
+    get_application_info_use_case = providers.Factory(
+        GetApplicationInfoUseCase,
+        health_check_service=health_check_service,
+        app_settings=app_settings,
+    )
+
     training_management_use_case = providers.Factory(
         TrainingManagementUseCase,
         training_job_repository=training_job_repository,
@@ -151,6 +178,7 @@ def init_container(settings: AppSettings) -> AppContainer:
 
     container = AppContainer()
     container.config.from_pydantic(settings)
+    container.app_settings.override(providers.Object(settings))
 
     _app_container = container
     return container

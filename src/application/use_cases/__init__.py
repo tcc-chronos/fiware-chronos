@@ -6,6 +6,7 @@ of the application. Use cases orchestrate the flow of data to and from
 the entities and implement the business rules of the application.
 """
 
+from .health_use_cases import GetApplicationInfoUseCase, GetHealthStatusUseCase
 from .model_use_cases import (
     CreateModelUseCase,
     DeleteModelUseCase,
@@ -20,4 +21,6 @@ __all__ = [
     "GetModelByIdUseCase",
     "UpdateModelUseCase",
     "DeleteModelUseCase",
+    "GetHealthStatusUseCase",
+    "GetApplicationInfoUseCase",
 ]

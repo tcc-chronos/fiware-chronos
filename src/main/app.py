@@ -29,7 +29,11 @@ from src.infrastructure.services import celery_tasks  # noqa: E402,F401
 
 # Import Celery tasks and routers after logging is configured
 from src.main.container import app_lifespan, init_container  # noqa: E402
-from src.presentation.controllers import devices_router, models_router  # noqa: E402
+from src.presentation.controllers import (  # noqa: E402
+    devices_router,
+    models_router,
+    system_router,
+)
 from src.presentation.controllers.training_controller import (  # noqa: E402
     router as training_router,
 )
@@ -92,6 +96,7 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
+    app.include_router(system_router)
     app.include_router(models_router)
     app.include_router(devices_router)
     app.include_router(training_router)

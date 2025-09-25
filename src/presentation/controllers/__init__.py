@@ -9,5 +9,6 @@ and application layer use cases.
 
 from .devices_controller import router as devices_router
 from .models_controller import router as models_router
+from .system_controller import router as system_router
 
-__all__ = ["models_router", "devices_router"]
+__all__ = ["models_router", "devices_router", "system_router"]

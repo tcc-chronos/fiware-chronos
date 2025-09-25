@@ -7,6 +7,6 @@ external frameworks or infrastructure concerns.
 """
 
 # Re-export submodules
-from src.domain import entities, repositories
+from src.domain import entities, ports, repositories, services
 
-__all__ = ["entities", "repositories"]
+__all__ = ["entities", "repositories", "services", "ports"]
