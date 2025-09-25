@@ -189,6 +189,7 @@ class ModelTrainingUseCase:
                 mse=test_metrics["mse"],
                 mae=test_metrics["mae"],
                 rmse=test_metrics["rmse"],
+                theil_u=test_metrics["theil_u"],
                 mape=test_metrics["mape"],
                 r2=test_metrics["r2"],
                 mae_pct=test_metrics["mae_pct"],
@@ -429,6 +430,7 @@ class ModelTrainingUseCase:
         mae = float(mean_absolute_error(y_true, y_pred))
         rmse = float(np.sqrt(mse))
         r2 = float(r2_score(y_true, y_pred))
+        theil_u = self._calculate_theil_u(y_true, y_pred)
 
         # Calculate percentage metrics
         mae_pct, rmse_pct, mape = self._calculate_percentage_metrics(y_true, y_pred)
@@ -437,6 +439,7 @@ class ModelTrainingUseCase:
             "mse": mse,
             "mae": mae,
             "rmse": rmse,
+            "theil_u": theil_u,
             "mape": mape,
             "r2": r2,
             "mae_pct": mae_pct,
@@ -471,6 +474,34 @@ class ModelTrainingUseCase:
         mape = mae_pct  # MAPE is equivalent to MAE% when relative to |y_true|
 
         return mae_pct, rmse_pct, mape
+
+    def _calculate_theil_u(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        """Calculate Theil's U statistic against a naïve (lag-1) forecast."""
+
+        if y_true.size < 2 or y_pred.size < 2:
+            return float("nan")
+
+        actual = y_true.astype(float)
+        predicted = y_pred.astype(float)
+
+        model_errors = actual[1:] - predicted[1:]
+        naive_errors = actual[1:] - actual[:-1]
+
+        finite_mask = np.isfinite(model_errors) & np.isfinite(naive_errors)
+        if not np.any(finite_mask):
+            return float("nan")
+
+        model_errors = model_errors[finite_mask]
+        naive_errors = naive_errors[finite_mask]
+
+        denominator_mse = np.mean(naive_errors**2)
+        if denominator_mse <= np.finfo(float).eps:
+            return float("nan")
+
+        numerator_rmse = float(np.sqrt(np.mean(model_errors**2)))
+        denominator_rmse = float(np.sqrt(denominator_mse))
+
+        return numerator_rmse / denominator_rmse
 
     async def _save_artifacts(
         self,

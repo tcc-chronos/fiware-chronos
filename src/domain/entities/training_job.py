@@ -57,6 +57,7 @@ class TrainingMetrics:
     mse: Optional[float] = None
     mae: Optional[float] = None
     rmse: Optional[float] = None
+    theil_u: Optional[float] = None
     mape: Optional[float] = None
     r2: Optional[float] = None
     mae_pct: Optional[float] = None

@@ -636,6 +636,7 @@ class TrainingManagementUseCase:
                 mse=training_job.metrics.mse,
                 mae=training_job.metrics.mae,
                 rmse=training_job.metrics.rmse,
+                theil_u=training_job.metrics.theil_u,
                 mape=training_job.metrics.mape,
                 r2=training_job.metrics.r2,
                 mae_pct=training_job.metrics.mae_pct,
