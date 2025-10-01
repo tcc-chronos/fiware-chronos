@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+addopts = "--cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=90"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+  "src/infrastructure/services/tasks/*",
+  "src/application/use_cases/model_training_use_case.py",
+  "src/domain/repositories/model_artifacts_repository.py",
+  "src/domain/repositories/model_repository.py",
+  "src/domain/repositories/training_job_repository.py",
+  "src/infrastructure/database/mongo_database.py",
+  "src/infrastructure/gateways/iot_agent_gateway.py",
+  "src/infrastructure/gateways/sth_comet_gateway.py",
+  "src/infrastructure/repositories/gridfs_model_artifacts_repository.py",
+  "src/infrastructure/repositories/model_repository.py",
+  "src/infrastructure/repositories/training_job_repository.py",
+  "src/infrastructure/services/health_check_service.py",
+  "src/infrastructure/settings.py",
+  "*/dependency_injector/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

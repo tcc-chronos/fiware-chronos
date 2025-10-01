@@ -1,4 +1,4 @@
-.PHONY: up build stop run format lint
+.PHONY: up build stop run format lint test
 
 up:
 	./scripts/docker/docker_up.sh $(ARGS)
@@ -17,3 +17,7 @@ format:
 
 lint:
 	./scripts/lint.sh
+
+test:
+	coverage run -m pytest $(ARGS)
+	coverage html

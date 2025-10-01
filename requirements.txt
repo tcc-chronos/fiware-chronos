@@ -61,3 +61,6 @@ black==25.1.0      # Code formatter for consistent Python style
 isort==6.0.1       # Import statement organizer
 flake8==7.3.0      # Linting tool for code quality checks
 mypy==1.17.1       # Static type checker for Python
+pytest==8.4.2      # Testing framework
+pytest-asyncio==0.24.0  # Asyncio support for pytest
+pytest-cov==5.0.0  # Coverage plugin for pytest

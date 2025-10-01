@@ -44,3 +44,7 @@ tox.ini
 
 # includes requirements.txt
 !requirements.txt
+
+# test files
+coverage.xml
+htmlcov/*
