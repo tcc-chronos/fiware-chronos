@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from dependency_injector import containers, providers
 
+from src.application.models import SystemInfo
 from src.application.use_cases.device_use_cases import GetDevicesUseCase
 from src.application.use_cases.health_use_cases import (
     GetApplicationInfoUseCase,
@@ -38,6 +39,7 @@ from src.infrastructure.repositories.training_job_repository import (
     TrainingJobRepository,
 )
 from src.infrastructure.services.health_check_service import HealthCheckService
+from src.infrastructure.services.training_orchestrator import CeleryTrainingOrchestrator
 from src.shared import get_logger
 
 from .config import AppSettings
@@ -54,8 +56,6 @@ class AppContainer(containers.DeclarativeContainer):
 
     # Settings
     config = providers.Configuration()
-    app_settings = providers.Dependency(instance_of=AppSettings)
-
     # Infrastructure
     mongo_database = providers.Singleton(
         MongoDatabase,
@@ -66,6 +66,10 @@ class AppContainer(containers.DeclarativeContainer):
     model_repository = providers.Singleton(
         ModelRepository,
         mongo_database=mongo_database,
+    )
+
+    training_orchestrator = providers.Singleton(
+        CeleryTrainingOrchestrator,
     )
 
     training_job_repository = providers.Singleton(
@@ -139,6 +143,24 @@ class AppContainer(containers.DeclarativeContainer):
         sth_comet_url=config.fiware.sth_url,
     )
 
+    system_info = providers.Singleton(
+        SystemInfo,
+        title=config.ge.title,
+        description=config.ge.description,
+        version=config.ge.version,
+        environment=providers.Callable(
+            lambda env: env.value if hasattr(env, "value") else str(env),
+            config.environment,
+        ),
+        git_commit=config.ge.git_commit,
+        build_time=config.ge.build_time,
+        celery_broker_url=config.celery.broker_url,
+        celery_result_backend_url=config.celery.result_backend_url,
+        fiware_orion_url=config.fiware.orion_url,
+        fiware_iot_agent_url=config.fiware.iot_agent_url,
+        fiware_sth_url=config.fiware.sth_url,
+    )
+
     get_health_status_use_case = providers.Factory(
         GetHealthStatusUseCase,
         health_check_service=health_check_service,
@@ -147,7 +169,7 @@ class AppContainer(containers.DeclarativeContainer):
     get_application_info_use_case = providers.Factory(
         GetApplicationInfoUseCase,
         health_check_service=health_check_service,
-        app_settings=app_settings,
+        system_info=system_info,
     )
 
     training_management_use_case = providers.Factory(
@@ -155,6 +177,10 @@ class AppContainer(containers.DeclarativeContainer):
         training_job_repository=training_job_repository,
         model_repository=model_repository,
         artifacts_repository=model_artifacts_repository,
+        sth_gateway=sth_comet_gateway,
+        training_orchestrator=training_orchestrator,
+        fiware_service=providers.Object("smart"),
+        fiware_service_path=providers.Object("/"),
     )
 
     model_training_use_case = providers.Factory(
@@ -178,8 +204,6 @@ def init_container(settings: AppSettings) -> AppContainer:
 
     container = AppContainer()
     container.config.from_pydantic(settings)
-    container.app_settings.override(providers.Object(settings))
-
     _app_container = container
     return container
 

@@ -6,7 +6,7 @@ This module defines the interface for communicating with the IoT Agent.
 
 from abc import ABC, abstractmethod
 
-from src.application.dtos.device_dto import IoTAgentDevicesResponseDTO
+from src.domain.entities.iot import IoTDeviceCollection
 
 
 class IIoTAgentGateway(ABC):
@@ -15,7 +15,7 @@ class IIoTAgentGateway(ABC):
     @abstractmethod
     async def get_devices(
         self, service: str = "smart", service_path: str = "/"
-    ) -> IoTAgentDevicesResponseDTO:
+    ) -> IoTDeviceCollection:
         """
         Retrieve devices from IoT Agent.
 
@@ -24,7 +24,7 @@ class IIoTAgentGateway(ABC):
             service_path: FIWARE service path header
 
         Returns:
-            IoTAgentDevicesResponseDTO: Response containing devices information
+            IoTDeviceCollection: Response containing devices information
 
         Raises:
             Exception: If communication with IoT Agent fails

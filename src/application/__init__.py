@@ -8,6 +8,6 @@ to achieve the application's goals.
 """
 
 # Re-export submodules
-from src.application import dtos, use_cases
+from src.application import dtos, models, use_cases
 
-__all__ = ["dtos", "use_cases"]
+__all__ = ["dtos", "use_cases", "models"]

@@ -22,11 +22,11 @@ from tensorflow.keras.layers import GRU, LSTM, Dense, Dropout, Input  # type: ig
 from tensorflow.keras.models import Sequential  # type: ignore
 from tensorflow.keras.optimizers import Adam  # type: ignore
 
-from src.application.dtos.training_dto import CollectedDataDTO
 from src.application.use_cases.data_preprocessing_use_case import (
     DataPreprocessingUseCase,
 )
 from src.domain.entities.model import Model
+from src.domain.entities.time_series import HistoricDataPoint
 from src.domain.entities.training_job import TrainingMetrics
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 
@@ -64,7 +64,7 @@ class ModelTrainingUseCase:
     async def execute(
         self,
         model_config: Model,
-        collected_data: List[CollectedDataDTO],
+        collected_data: List[HistoricDataPoint],
         window_size: int,
         training_job_id: str,
     ) -> Tuple[TrainingMetrics, str, str, str, str]:

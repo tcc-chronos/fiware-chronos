@@ -1,13 +1,13 @@
-"""
-IoT Agent Gateway Implementation - Infrastructure Layer
+"""IoT Agent gateway implementation - Infrastructure layer."""
 
-This module implements the gateway for communicating with the IoT Agent.
-"""
+from __future__ import annotations
+
+from typing import Any, Dict, List
 
 import httpx
 from dependency_injector.wiring import inject
 
-from src.application.dtos.device_dto import IoTAgentDevicesResponseDTO
+from src.domain.entities.iot import DeviceAttribute, IoTDevice, IoTDeviceCollection
 from src.domain.gateways.iot_agent_gateway import IIoTAgentGateway
 from src.shared import get_logger
 
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 class IoTAgentGateway(IIoTAgentGateway):
-    """Implementation of IoT Agent Gateway."""
+    """HTTP client for the IoT Agent API."""
 
     @inject
     def __init__(self, iot_agent_url: str):
@@ -30,7 +30,7 @@ class IoTAgentGateway(IIoTAgentGateway):
 
     async def get_devices(
         self, service: str = "smart", service_path: str = "/"
-    ) -> IoTAgentDevicesResponseDTO:
+    ) -> IoTDeviceCollection:
         """
         Retrieve devices from IoT Agent.
 
@@ -39,7 +39,7 @@ class IoTAgentGateway(IIoTAgentGateway):
             service_path: FIWARE service path header
 
         Returns:
-            IoTAgentDevicesResponseDTO: Response containing devices information
+            IoTDeviceCollection: Response containing devices information
 
         Raises:
             httpx.HTTPError: If HTTP request fails
@@ -72,7 +72,7 @@ class IoTAgentGateway(IIoTAgentGateway):
                     status_code=response.status_code,
                 )
 
-                return IoTAgentDevicesResponseDTO(**response_data)
+                return self._to_domain(response_data)
 
         except httpx.HTTPStatusError as e:
             logger.error(
@@ -104,3 +104,45 @@ class IoTAgentGateway(IIoTAgentGateway):
                 exc_info=e,
             )
             raise Exception(f"Unexpected error communicating with IoT Agent: {str(e)}")
+
+    def _to_domain(self, payload: Dict[str, Any]) -> IoTDeviceCollection:
+        count = int(payload.get("count", 0))
+        devices_payload = payload.get("devices") or []
+        devices = [self._parse_device(item) for item in devices_payload if item]
+        return IoTDeviceCollection(count=count, devices=devices)
+
+    def _parse_device(self, data: Dict[str, Any]) -> IoTDevice:
+        return IoTDevice(
+            device_id=data.get("device_id", ""),
+            service=data.get("service", ""),
+            service_path=data.get("service_path", ""),
+            entity_name=data.get("entity_name", ""),
+            entity_type=data.get("entity_type", ""),
+            transport=data.get("transport", ""),
+            protocol=data.get("protocol", ""),
+            attributes=self._parse_attributes(data.get("attributes")),
+            lazy=self._ensure_dict_list(data.get("lazy")),
+            commands=self._ensure_dict_list(data.get("commands")),
+            static_attributes=self._ensure_dict_list(data.get("static_attributes")),
+        )
+
+    def _parse_attributes(self, payload: Any) -> List[DeviceAttribute]:
+        if not payload:
+            return []
+        attributes: List[DeviceAttribute] = []
+        for attr in payload:
+            if not isinstance(attr, dict):
+                continue
+            attributes.append(
+                DeviceAttribute(
+                    object_id=str(attr.get("object_id", "")),
+                    name=str(attr.get("name", "")),
+                    type=str(attr.get("type", "")),
+                )
+            )
+        return attributes
+
+    def _ensure_dict_list(self, payload: Any) -> List[Dict[str, Any]]:
+        if not payload:
+            return []
+        return [item for item in payload if isinstance(item, dict)]

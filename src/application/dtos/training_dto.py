@@ -133,13 +133,6 @@ class STHCometResponseDTO(BaseModel):
     contextResponses: List[Dict]
 
 
-class CollectedDataDTO(BaseModel):
-    """DTO for collected and processed data."""
-
-    timestamp: datetime
-    value: float
-
-
 class DataCollectionSummaryDTO(BaseModel):
     """DTO for data collection summary."""
 

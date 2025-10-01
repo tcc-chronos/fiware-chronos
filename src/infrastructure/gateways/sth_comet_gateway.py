@@ -12,8 +12,8 @@ from urllib.parse import quote
 import httpx
 import structlog
 
-from src.application.dtos.training_dto import CollectedDataDTO
 from src.domain.entities.errors import DomainError
+from src.domain.entities.time_series import HistoricDataPoint
 from src.domain.gateways.sth_comet_gateway import ISTHCometGateway
 
 logger = structlog.get_logger(__name__)
@@ -48,7 +48,7 @@ class STHCometGateway(ISTHCometGateway):
         h_offset: int,
         fiware_service: str = "smart",
         fiware_servicepath: str = "/",
-    ) -> List[CollectedDataDTO]:
+    ) -> List[HistoricDataPoint]:
         """Collect historical data from STH-Comet using hLimit and hOffset."""
 
         # Validate parameters
@@ -195,7 +195,9 @@ class STHCometGateway(ISTHCometGateway):
             logger.error("STH-Comet count error", error=str(e), url=url)
             raise STHCometError(f"STH-Comet count error: {str(e)}") from e
 
-    def _parse_sth_response(self, data: dict, attribute: str) -> List[CollectedDataDTO]:
+    def _parse_sth_response(
+        self, data: dict, attribute: str
+    ) -> List[HistoricDataPoint]:
         """Parse STH-Comet response and extract data points."""
 
         try:
@@ -225,7 +227,7 @@ class STHCometGateway(ISTHCometGateway):
 
             # Extract values
             values = target_attribute.get("values", [])
-            collected_data = []
+            collected_data: List[HistoricDataPoint] = []
 
             for value_entry in values:
                 try:
@@ -258,7 +260,7 @@ class STHCometGateway(ISTHCometGateway):
                         continue
 
                     collected_data.append(
-                        CollectedDataDTO(timestamp=timestamp, value=value)
+                        HistoricDataPoint(timestamp=timestamp, value=value)
                     )
 
                 except Exception as e:

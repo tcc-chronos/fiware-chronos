@@ -8,7 +8,7 @@ to collect historical data from FIWARE Context Broker.
 from abc import ABC, abstractmethod
 from typing import List
 
-from src.application.dtos.training_dto import CollectedDataDTO
+from src.domain.entities.time_series import HistoricDataPoint
 
 
 class ISTHCometGateway(ABC):
@@ -24,7 +24,7 @@ class ISTHCometGateway(ABC):
         h_offset: int,
         fiware_service: str = "smart",
         fiware_servicepath: str = "/",
-    ) -> List[CollectedDataDTO]:
+    ) -> List[HistoricDataPoint]:
         """
         Collect historical data from STH-Comet using hLimit and hOffset.
 

@@ -1,17 +1,13 @@
 """Use cases for health and application info endpoints."""
 
-from __future__ import annotations
-
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from src.application.dtos.health_dto import ApplicationInfoDTO, SystemHealthDTO
+from src.application.models import SystemInfo
 from src.domain.entities.health import ApplicationInfo
 from src.domain.ports.health_check import IHealthCheckService
-
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    from src.main.config import AppSettings
 
 
 class GetHealthStatusUseCase:
@@ -31,10 +27,10 @@ class GetApplicationInfoUseCase:
     def __init__(
         self,
         health_check_service: IHealthCheckService,
-        app_settings: "AppSettings",
+        system_info: SystemInfo,
     ) -> None:
         self._health_check_service = health_check_service
-        self._settings = app_settings
+        self._info = system_info
 
     async def execute(self, started_at: Optional[datetime]) -> ApplicationInfoDTO:
         system_health = await self._health_check_service.evaluate()
@@ -44,27 +40,27 @@ class GetApplicationInfoUseCase:
         uptime_seconds = max(0.0, (now - started).total_seconds())
 
         extras = {
-            "environment": self._settings.environment.value,
+            "environment": self._info.environment,
             "celery": {
-                "broker": self._redact_url(self._settings.celery.broker_url),
+                "broker": self._redact_url(self._info.celery_broker_url),
                 "result_backend": self._redact_url(
-                    self._settings.celery.result_backend_url
+                    self._info.celery_result_backend_url
                 ),
             },
             "fiware": {
-                "orion_url": self._settings.fiware.orion_url,
-                "iot_agent_url": self._settings.fiware.iot_agent_url,
-                "sth_url": self._settings.fiware.sth_url,
+                "orion_url": self._info.fiware_orion_url,
+                "iot_agent_url": self._info.fiware_iot_agent_url,
+                "sth_url": self._info.fiware_sth_url,
             },
         }
 
         info = ApplicationInfo(
-            name=self._settings.ge.title,
-            description=self._settings.ge.description,
-            version=self._settings.ge.version,
-            environment=self._settings.environment.value,
-            git_commit=self._settings.ge.git_commit,
-            build_time=self._settings.ge.build_time,
+            name=self._info.title,
+            description=self._info.description,
+            version=self._info.version,
+            environment=self._info.environment,
+            git_commit=self._info.git_commit,
+            build_time=self._info.build_time,
             started_at=started,
             uptime_seconds=uptime_seconds,
             status=system_health.status,

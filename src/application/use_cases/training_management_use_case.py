@@ -26,12 +26,12 @@ from src.domain.entities.training_job import (
     TrainingJob,
     TrainingStatus,
 )
+from src.domain.gateways.sth_comet_gateway import ISTHCometGateway
+from src.domain.ports.training_orchestrator import ITrainingOrchestrator
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
 from src.domain.services import validate_model_configuration
-from src.infrastructure.gateways.sth_comet_gateway import STHCometGateway
-from src.main.config import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -50,6 +50,10 @@ class TrainingManagementUseCase:
         training_job_repository: ITrainingJobRepository,
         model_repository: IModelRepository,
         artifacts_repository: IModelArtifactsRepository,
+        sth_gateway: ISTHCometGateway,
+        training_orchestrator: ITrainingOrchestrator,
+        fiware_service: str = "smart",
+        fiware_service_path: str = "/",
     ):
         """
         Initialize the training management use case.
@@ -62,6 +66,10 @@ class TrainingManagementUseCase:
         self.training_job_repository = training_job_repository
         self.model_repository = model_repository
         self.artifacts_repository = artifacts_repository
+        self.sth_gateway = sth_gateway
+        self.training_orchestrator = training_orchestrator
+        self.fiware_service = fiware_service
+        self.fiware_service_path = fiware_service_path
 
     async def start_training(
         self, model_id: UUID, request: TrainingRequestDTO
@@ -133,15 +141,13 @@ class TrainingManagementUseCase:
                 )
                 raise TrainingManagementError(message)
 
-            settings = get_settings()
-            sth_gateway = STHCometGateway(settings.fiware.sth_url)
             try:
-                total_available = await sth_gateway.get_total_count_from_header(
+                total_available = await self.sth_gateway.get_total_count_from_header(
                     entity_type=model.entity_type,
                     entity_id=model.entity_id,
                     attribute=model.feature,
-                    fiware_service="smart",
-                    fiware_servicepath="/",
+                    fiware_service=self.fiware_service,
+                    fiware_servicepath=self.fiware_service_path,
                 )
             except Exception as exc:
                 raise TrainingManagementError(
@@ -202,36 +208,22 @@ class TrainingManagementUseCase:
             # Save training job
             created_job = await self.training_job_repository.create(training_job)
 
-            # Start Celery orchestration task
-            from src.infrastructure.services.celery_config import celery_app
-
-            logger.info(
-                "Dispatching orchestration task",
-                training_job_id=str(created_job.id),
-                model_id=str(model_id),
-                task_name="orchestrate_training",
-                queue="orchestration",
+            task_id = await self.training_orchestrator.dispatch_training_job(
+                training_job_id=created_job.id,
+                model_id=model_id,
+                last_n=request.last_n,
             )
 
-            result = celery_app.send_task(
-                "orchestrate_training",
-                kwargs={
-                    "training_job_id": str(created_job.id),
-                    "model_id": str(model_id),
-                    "last_n": request.last_n,
-                },
-                queue="orchestration",
-            )
-
-            await self.training_job_repository.update_task_refs(
-                created_job.id,
-                task_refs={"orchestration_task_id": result.id},
-            )
+            if task_id:
+                await self.training_job_repository.update_task_refs(
+                    created_job.id,
+                    task_refs={"orchestration_task_id": task_id},
+                )
 
             logger.info(
                 "Orchestration task dispatched",
                 training_job_id=str(created_job.id),
-                task_id=result.id,
+                task_id=task_id,
                 status="sent",
             )
 
@@ -360,8 +352,6 @@ class TrainingManagementUseCase:
                     f"{training_job.status.value}"
                 )
 
-            from src.infrastructure.services.celery_config import celery_app
-
             if training_job.status != TrainingStatus.CANCEL_REQUESTED:
                 await self.training_job_repository.update_training_job_status(
                     training_job_id, TrainingStatus.CANCEL_REQUESTED
@@ -388,26 +378,11 @@ class TrainingManagementUseCase:
 
             if revoke_ids:
                 logger.info(
-                    "Revoking Celery tasks for cancellation",
+                    "Revoking orchestration tasks",
                     training_job_id=str(training_job_id),
                     task_count=len(revoke_ids),
                 )
-                for task_id in revoke_ids:
-                    try:
-                        celery_app.control.revoke(
-                            task_id,
-                            terminate=True,
-                            signal="SIGTERM",
-                        )
-                    except (
-                        Exception
-                    ) as revoke_error:  # pragma: no cover - best effort only
-                        logger.warning(
-                            "Failed to revoke task",
-                            training_job_id=str(training_job_id),
-                            task_id=task_id,
-                            error=str(revoke_error),
-                        )
+                await self.training_orchestrator.revoke_tasks(list(revoke_ids))
 
             now = datetime.now(timezone.utc)
 
@@ -457,12 +432,7 @@ class TrainingManagementUseCase:
                 model.update_timestamp()
                 await self.model_repository.update(model)
 
-            celery_app.send_task(
-                "cleanup_training_tasks",
-                args=[str(training_job_id)],
-                queue="orchestration",
-                countdown=60,
-            )
+            await self.training_orchestrator.schedule_cleanup(training_job_id)
 
             logger.info("Training job cancelled", training_job_id=str(training_job_id))
 

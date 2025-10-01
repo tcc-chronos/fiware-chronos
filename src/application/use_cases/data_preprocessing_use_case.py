@@ -12,7 +12,7 @@ import pandas as pd
 import structlog
 from sklearn.preprocessing import StandardScaler
 
-from src.application.dtos.training_dto import CollectedDataDTO
+from src.domain.entities.time_series import HistoricDataPoint
 
 logger = structlog.get_logger(__name__)
 
@@ -50,7 +50,7 @@ class DataPreprocessingUseCase:
 
     def execute(
         self,
-        collected_data: List[CollectedDataDTO],
+        collected_data: List[HistoricDataPoint],
         window_size: int,
         target_column: str = "value",
         feature_columns: Optional[List[str]] = None,
@@ -248,7 +248,7 @@ class DataPreprocessingUseCase:
         )
 
     def _convert_to_dataframe(
-        self, collected_data: List[CollectedDataDTO]
+        self, collected_data: List[HistoricDataPoint]
     ) -> pd.DataFrame:
         """Convert collected data to pandas DataFrame."""
 

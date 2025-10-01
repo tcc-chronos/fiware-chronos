@@ -24,7 +24,6 @@ from .model_dto import (
     RNNLayerDTO,
 )
 from .training_dto import (
-    CollectedDataDTO,
     DataCollectionJobDTO,
     StartTrainingResponseDTO,
     TrainingJobDTO,
@@ -56,5 +55,4 @@ __all__ = [
     "TrainingJobSummaryDTO",
     "DataCollectionJobDTO",
     "StartTrainingResponseDTO",
-    "CollectedDataDTO",
 ]

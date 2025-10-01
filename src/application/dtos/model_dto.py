@@ -33,27 +33,8 @@ class ModelTrainingSummaryDTO(BaseModel):
     metrics: Optional[TrainingMetricsDTO] = None
 
     model_config = {
-        "json_schema_extra": {
-            "example": {
-                "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "status": "completed",
-                "start_time": "2025-09-21T16:00:00Z",
-                "end_time": "2025-09-21T16:30:00Z",
-                "error": None,
-                "data_collection_progress": 100.0,
-                "total_data_points_requested": 10000,
-                "total_data_points_collected": 10000,
-                "created_at": "2025-09-21T16:00:00Z",
-                "updated_at": "2025-09-21T16:30:00Z",
-                "metrics": {
-                    "mse": 0.0012,
-                    "mae": 0.02,
-                    "rmse": 0.035,
-                    "best_epoch": 42,
-                },
-            }
-        }
-    }
+        "json_schema_extra": {"example": {"id": "uuid", "status": "completed"}}
+    }  # pragma: no cover - documentation only
 
 
 class ModelTypeOptionDTO(BaseModel):
@@ -62,7 +43,7 @@ class ModelTypeOptionDTO(BaseModel):
     value: ModelType
     label: str
 
-    model_config = {
+    model_config = {  # pragma: no cover - schema example metadata
         "json_schema_extra": {
             "example": {
                 "value": "lstm",
@@ -208,31 +189,12 @@ class ModelCreateDTO(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "name": "LSTM - temperature",
-                "description": "LSTM model for temperature forecasting",
+                "name": "Example Model",
                 "model_type": "lstm",
-                "batch_size": 32,
-                "epochs": 100,
-                "learning_rate": 0.001,
-                "validation_ratio": 0.15,
-                "test_ratio": 0.15,
-                "lookback_window": 24,
-                "forecast_horizon": 6,
                 "feature": "temperature",
-                "rnn_layers": [
-                    {"units": 128, "dropout": 0.1, "recurrent_dropout": 0.0},
-                    {"units": 64, "dropout": 0.2, "recurrent_dropout": 0.05},
-                ],
-                "dense_layers": [
-                    {"units": 64, "dropout": 0.1, "activation": "relu"},
-                    {"units": 32, "dropout": 0.1, "activation": "relu"},
-                ],
-                "early_stopping_patience": 10,
-                "entity_type": "Sensor",
-                "entity_id": "urn:ngsi-ld:Chronos:ESP32:001",
             }
         }
-    }
+    }  # pragma: no cover - documentation only
 
 
 class ModelUpdateDTO(BaseModel):
@@ -310,23 +272,11 @@ class ModelUpdateDTO(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "name": "Updated Temperature Model",
-                "description": "Modelo atualizado para previsão de temperatura",
-                "rnn_layers": [
-                    {"units": 128, "dropout": 0.15, "recurrent_dropout": 0.05},
-                    {"units": 64, "dropout": 0.1, "recurrent_dropout": 0.0},
-                ],
-                "dense_layers": [
-                    {"units": 64, "dropout": 0.1, "activation": "relu"},
-                    {"units": 32, "dropout": 0.1, "activation": "relu"},
-                ],
-                "epochs": 150,
-                "batch_size": 64,
-                "learning_rate": 0.0005,
-                "feature": "temperatura",
+                "name": "Updated Model",
+                "description": "Updated description",
             }
         }
-    }
+    }  # pragma: no cover - documentation only
 
 
 class ModelResponseDTO(BaseModel):
@@ -364,49 +314,12 @@ class ModelResponseDTO(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "name": "LSTM - temperature",
-                "description": "LSTM model for temperature forecasting",
-                "model_type": "lstm",
+                "id": "uuid",
+                "name": "Model",
                 "status": "draft",
-                "batch_size": 32,
-                "epochs": 100,
-                "learning_rate": 0.001,
-                "validation_ratio": 0.15,
-                "test_ratio": 0.15,
-                "rnn_layers": [
-                    {"units": 128, "dropout": 0.1, "recurrent_dropout": 0.0},
-                    {"units": 64, "dropout": 0.2, "recurrent_dropout": 0.05},
-                ],
-                "dense_layers": [
-                    {"units": 64, "dropout": 0.1, "activation": "relu"},
-                    {"units": 32, "dropout": 0.1, "activation": "relu"},
-                ],
-                "early_stopping_patience": 10,
-                "lookback_window": 24,
-                "forecast_horizon": 6,
-                "feature": "temperature",
-                "entity_type": "Sensor",
-                "entity_id": "urn:ngsi-ld:Chronos:ESP32:001",
-                "created_at": "2025-09-14T10:00:00Z",
-                "updated_at": "2025-09-14T10:00:00Z",
-                "trainings": [
-                    {
-                        "id": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
-                        "status": "completed",
-                        "start_time": "2025-09-14T11:00:00Z",
-                        "end_time": "2025-09-14T12:30:00Z",
-                        "error": None,
-                        "data_collection_progress": 100.0,
-                        "total_data_points_requested": 10000,
-                        "total_data_points_collected": 10000,
-                        "created_at": "2025-09-14T11:00:00Z",
-                        "updated_at": "2025-09-14T12:30:00Z",
-                    }
-                ],
             }
         }
-    }
+    }  # pragma: no cover - documentation only
 
 
 class ModelDetailResponseDTO(ModelResponseDTO):

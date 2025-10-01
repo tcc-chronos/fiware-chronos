@@ -6,9 +6,11 @@ from typing import Any, Dict, List
 from uuid import UUID
 
 from src.domain.entities.model import DenseLayerConfig, ModelType, RNNLayerConfig
+from src.domain.entities.time_series import HistoricDataPoint
 from src.domain.entities.training_job import TrainingStatus
 from src.infrastructure.services.celery_config import celery_app
 from src.infrastructure.services.tasks.base import CallbackTask, logger
+from src.infrastructure.settings import get_settings
 
 
 @celery_app.task(bind=True, base=CallbackTask, name="train_model_task")
@@ -52,7 +54,6 @@ def train_model_task(
             window_size=window_size,
         )
 
-        from src.application.dtos.training_dto import CollectedDataDTO
         from src.domain.entities.model import Model
         from src.infrastructure.database.mongo_database import MongoDatabase
         from src.infrastructure.repositories.gridfs_model_artifacts_repository import (
@@ -62,7 +63,6 @@ def train_model_task(
         from src.infrastructure.repositories.training_job_repository import (
             TrainingJobRepository,
         )
-        from src.main.config import get_settings
 
         settings = get_settings()
 
@@ -168,22 +168,43 @@ def train_model_task(
         model.entity_type = str(model_config.get("entity_type", ""))
         model.entity_id = str(model_config.get("entity_id", ""))
 
-        data_dtos = [
-            CollectedDataDTO(
-                timestamp=datetime.fromisoformat(item["timestamp"]),
-                value=item["value"],
-            )
-            for item in collected_data
-        ]
+        data_points: List[HistoricDataPoint] = []
+        for item in collected_data:
+            timestamp_value = item.get("timestamp")
+            if isinstance(timestamp_value, str):
+                timestamp_dt = datetime.fromisoformat(timestamp_value)
+            elif isinstance(timestamp_value, datetime):
+                timestamp_dt = timestamp_value
+            else:
+                logger.warning(
+                    "Skipping data point with invalid timestamp",
+                    raw_timestamp=timestamp_value,
+                )
+                continue
 
-        if len(data_dtos) < window_size + 10:
+            value_raw = item.get("value")
+            if value_raw is None:
+                logger.warning("Skipping data point with missing value")
+                continue
+            try:
+                value = float(value_raw)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Skipping data point with non-numeric value",
+                    raw_value=value_raw,
+                )
+                continue
+
+            data_points.append(HistoricDataPoint(timestamp=timestamp_dt, value=value))
+
+        if len(data_points) < window_size + 10:
             error_msg = (
-                f"Insufficient data: {len(data_dtos)} points available, "
+                f"Insufficient data: {len(data_points)} points available, "
                 f"need at least {window_size + 10} for window_size={window_size}"
             )
             logger.warning(
                 "Insufficient data after processing",
-                available_points=len(data_dtos),
+                available_points=len(data_points),
                 required_minimum=window_size + 10,
                 window_size=window_size,
             )
@@ -210,7 +231,7 @@ def train_model_task(
         ) = asyncio.run(
             model_training.execute(
                 model_config=model,
-                collected_data=data_dtos,
+                collected_data=data_points,
                 window_size=window_size,
                 training_job_id=training_job_id,
             )
@@ -284,7 +305,8 @@ def train_model_task(
             from src.infrastructure.repositories.training_job_repository import (
                 TrainingJobRepository,
             )
-            from src.main.config import settings
+
+            settings = get_settings()
 
             database = MongoDatabase(
                 mongo_uri=settings.database.mongo_uri,

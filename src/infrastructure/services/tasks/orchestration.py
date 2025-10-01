@@ -12,6 +12,7 @@ from src.infrastructure.services.celery_config import celery_app
 from src.infrastructure.services.tasks.base import CallbackTask, logger
 from src.infrastructure.services.tasks.data_collection import collect_data_chunk
 from src.infrastructure.services.tasks.processing import process_collected_data
+from src.infrastructure.settings import get_settings
 
 
 @celery_app.task(bind=True, base=CallbackTask, name="orchestrate_training")
@@ -30,7 +31,6 @@ def orchestrate_training(
         from src.infrastructure.repositories.training_job_repository import (
             TrainingJobRepository,
         )
-        from src.main.config import get_settings
 
         settings = get_settings()
 
@@ -84,8 +84,8 @@ def orchestrate_training(
                 entity_type=model.entity_type,
                 entity_id=model.entity_id,
                 attribute=model.feature,
-                fiware_service="smart",
-                fiware_servicepath="/",
+                fiware_service=settings.fiware.service,
+                fiware_servicepath=settings.fiware.service_path,
             )
         )
 
@@ -155,6 +155,8 @@ def orchestrate_training(
                     attribute=model.feature,
                     h_limit=job.last_n,
                     h_offset=job.h_offset,
+                    fiware_service=settings.fiware.service,
+                    fiware_servicepath=settings.fiware.service_path,
                 ).set(queue="data_collection", task_id=str(job.id))
                 for job in collection_jobs
             ]
@@ -243,7 +245,6 @@ def orchestrate_training(
             from src.infrastructure.repositories.training_job_repository import (
                 TrainingJobRepository,
             )
-            from src.main.config import get_settings
 
             settings = get_settings()
             database = MongoDatabase(

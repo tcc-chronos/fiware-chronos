@@ -17,7 +17,7 @@ def cleanup_training_tasks(training_job_id: str) -> None:
         from src.infrastructure.repositories.training_job_repository import (
             TrainingJobRepository,
         )
-        from src.main.config import get_settings
+        from src.infrastructure.settings import get_settings
 
         settings = get_settings()
         database = MongoDatabase(

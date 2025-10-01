@@ -8,6 +8,7 @@ from uuid import UUID
 from src.domain.entities.training_job import DataCollectionStatus, TrainingStatus
 from src.infrastructure.services.celery_config import celery_app
 from src.infrastructure.services.tasks.base import CallbackTask, logger
+from src.infrastructure.settings import get_settings
 
 
 @celery_app.task(bind=True, base=CallbackTask, name="collect_data_chunk")
@@ -43,7 +44,6 @@ def collect_data_chunk(
         from src.infrastructure.repositories.training_job_repository import (
             TrainingJobRepository,
         )
-        from src.main.config import get_settings
 
         settings = get_settings()
 
@@ -165,7 +165,6 @@ def collect_data_chunk(
             from src.infrastructure.repositories.training_job_repository import (
                 TrainingJobRepository,
             )
-            from src.main.config import get_settings
 
             settings = get_settings()
             database = MongoDatabase(
