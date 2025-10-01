@@ -83,6 +83,8 @@ class TrainingJobDTO(BaseModel):
     # Results
     metrics: Optional[TrainingMetricsDTO] = None
     model_artifact_id: Optional[str] = None
+    metadata_artifact_id: Optional[str] = None
+    training_history: Optional[Dict[str, Any]] = None
 
     # Error handling
     error: Optional[str] = None
@@ -108,6 +110,8 @@ class TrainingJobSummaryDTO(BaseModel):
     end_time: Optional[datetime] = None
     error: Optional[str] = None
     created_at: datetime
+    metadata_artifact_id: Optional[str] = None
+    training_history: Optional[Dict[str, Any]] = None
 
 
 class StartTrainingResponseDTO(BaseModel):

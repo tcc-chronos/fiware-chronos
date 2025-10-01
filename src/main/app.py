@@ -32,6 +32,7 @@ from src.main.container import app_lifespan, init_container  # noqa: E402
 from src.presentation.controllers import (  # noqa: E402
     devices_router,
     models_router,
+    predictions_router,
     system_router,
 )
 from src.presentation.controllers.training_controller import (  # noqa: E402
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
     app.include_router(system_router)
     app.include_router(models_router)
     app.include_router(devices_router)
+    app.include_router(predictions_router)
     app.include_router(training_router)
 
     return app

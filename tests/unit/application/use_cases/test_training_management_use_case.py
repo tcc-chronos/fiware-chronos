@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 from uuid import UUID, uuid4
@@ -213,8 +214,13 @@ class _TrainingJobRepository(ITrainingJobRepository):
 
 
 class _ArtifactsRepository(IModelArtifactsRepository):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        artifacts: Optional[Dict[str, ModelArtifact]] = None,
+    ) -> None:
         self.deleted: List[str] = []
+        self.artifacts = artifacts or {}
+        self.raise_on_get = False
 
     async def save_artifact(
         self,
@@ -231,10 +237,10 @@ class _ArtifactsRepository(IModelArtifactsRepository):
     ) -> Optional[ModelArtifact]:  # pragma: no cover
         return None
 
-    async def get_artifact_by_id(
-        self, artifact_id: str
-    ) -> Optional[ModelArtifact]:  # pragma: no cover
-        return None
+    async def get_artifact_by_id(self, artifact_id: str) -> Optional[ModelArtifact]:
+        if self.raise_on_get:
+            raise RuntimeError("boom")
+        return self.artifacts.get(artifact_id)
 
     async def delete_artifact(self, artifact_id: str) -> bool:
         self.deleted.append(artifact_id)
@@ -397,6 +403,92 @@ async def test_cancel_training_job_returns_false_for_missing(use_case, model):
 
     result = await use_case_obj.cancel_training_job(model.id, uuid4())
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_training_metadata_history_surface_in_dto_and_summary(use_case, model):
+    use_case_obj, _, training_repo, artifacts, _, _ = use_case
+
+    metadata_id = "meta-history"
+    metadata_payload = {
+        "training_history": {
+            "best_epoch": 8,
+            "epochs_trained": 12,
+        }
+    }
+    artifacts.artifacts[metadata_id] = ModelArtifact(
+        metadata_id,
+        "metadata",
+        json.dumps(metadata_payload).encode("utf-8"),
+    )
+
+    job = TrainingJob(
+        id=uuid4(),
+        model_id=model.id,
+        status=TrainingStatus.COMPLETED,
+        metadata_artifact_id=metadata_id,
+    )
+    training_repo.jobs[job.id] = job
+
+    dto = await use_case_obj.get_training_job(model.id, job.id)
+    assert dto is not None
+    assert dto.metadata_artifact_id == metadata_id
+    assert dto.training_history == metadata_payload["training_history"]
+
+    summaries = await use_case_obj.list_training_jobs_by_model(model.id)
+    assert summaries
+    assert summaries[0].metadata_artifact_id == metadata_id
+    assert summaries[0].training_history == metadata_payload["training_history"]
+
+
+@pytest.mark.asyncio
+async def test_training_metadata_invalid_json_returns_none(use_case, model):
+    use_case_obj, _, training_repo, artifacts, _, _ = use_case
+
+    metadata_id = "meta-invalid"
+    artifacts.artifacts[metadata_id] = ModelArtifact(
+        metadata_id,
+        "metadata",
+        b"{not-json",
+    )
+
+    job = TrainingJob(
+        id=uuid4(),
+        model_id=model.id,
+        status=TrainingStatus.COMPLETED,
+        metadata_artifact_id=metadata_id,
+    )
+    training_repo.jobs[job.id] = job
+
+    dto = await use_case_obj.get_training_job(model.id, job.id)
+    assert dto is not None
+    assert dto.training_history is None
+
+    summary = (await use_case_obj.list_training_jobs_by_model(model.id))[0]
+    assert summary.training_history is None
+
+
+@pytest.mark.asyncio
+async def test_training_metadata_fetch_failure_returns_none(use_case, model):
+    use_case_obj, _, training_repo, artifacts, _, _ = use_case
+
+    metadata_id = "meta-missing"
+    artifacts.raise_on_get = True
+
+    job = TrainingJob(
+        id=uuid4(),
+        model_id=model.id,
+        status=TrainingStatus.COMPLETED,
+        metadata_artifact_id=metadata_id,
+    )
+    training_repo.jobs[job.id] = job
+
+    dto = await use_case_obj.get_training_job(model.id, job.id)
+    assert dto is not None
+    assert dto.training_history is None
+
+    summary = (await use_case_obj.list_training_jobs_by_model(model.id))[0]
+    assert summary.training_history is None
 
 
 @pytest.mark.asyncio

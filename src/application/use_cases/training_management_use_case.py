@@ -4,9 +4,10 @@ Application Use Cases - Training Management
 This module contains use cases for managing training jobs.
 """
 
+import json
 from datetime import datetime, timezone
 from math import ceil
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import structlog
@@ -282,7 +283,8 @@ class TrainingManagementUseCase:
             if not training_job or training_job.model_id != model_id:
                 return None
 
-            return self._to_training_job_dto(training_job)
+            metadata = await self._extract_training_metadata(training_job)
+            return self._to_training_job_dto(training_job, metadata)
 
         except Exception as e:
             logger.error(
@@ -305,7 +307,12 @@ class TrainingManagementUseCase:
             # Apply pagination manually since repository returns full list
             training_jobs = training_jobs[skip : skip + limit]
 
-            return [self._to_training_job_summary_dto(job) for job in training_jobs]
+            results: List[TrainingJobSummaryDTO] = []
+            for job in training_jobs:
+                metadata = await self._extract_training_metadata(job)
+                results.append(self._to_training_job_summary_dto(job, metadata))
+
+            return results
 
         except Exception as e:
             logger.error(
@@ -581,7 +588,48 @@ class TrainingManagementUseCase:
                 f"Failed to delete training job: {str(e)}"
             ) from e
 
-    def _to_training_job_dto(self, training_job: TrainingJob) -> TrainingJobDTO:
+    async def _extract_training_metadata(
+        self, training_job: TrainingJob
+    ) -> Optional[Dict[str, Any]]:
+        metadata_id = training_job.metadata_artifact_id
+        if not metadata_id:
+            return None
+
+        try:
+            artifact = await self.artifacts_repository.get_artifact_by_id(metadata_id)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning(
+                "training.metadata.fetch_failed",
+                training_job_id=str(training_job.id),
+                metadata_artifact_id=metadata_id,
+                error=str(exc),
+            )
+            return None
+
+        if not artifact:
+            logger.info(
+                "training.metadata.not_found",
+                training_job_id=str(training_job.id),
+                metadata_artifact_id=metadata_id,
+            )
+            return None
+
+        try:
+            return json.loads(artifact.content.decode("utf-8"))
+        except Exception as exc:
+            logger.warning(
+                "training.metadata.parse_failed",
+                training_job_id=str(training_job.id),
+                metadata_artifact_id=metadata_id,
+                error=str(exc),
+            )
+            return None
+
+    def _to_training_job_dto(
+        self,
+        training_job: TrainingJob,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> TrainingJobDTO:
         """Convert TrainingJob entity to DTO."""
 
         # Convert data collection jobs
@@ -616,6 +664,10 @@ class TrainingManagementUseCase:
                 best_epoch=training_job.metrics.best_epoch,
             )
 
+        training_history = (
+            metadata.get("training_history") if isinstance(metadata, dict) else None
+        )
+
         return TrainingJobDTO(
             id=training_job.id,
             model_id=training_job.model_id,
@@ -635,18 +687,26 @@ class TrainingManagementUseCase:
             training_end=training_job.training_end,
             metrics=metrics,
             model_artifact_id=training_job.model_artifact_id,
+            metadata_artifact_id=training_job.metadata_artifact_id,
             error=training_job.error,
             error_details=training_job.error_details,
             created_at=training_job.created_at,
             updated_at=training_job.updated_at,
             total_duration_seconds=training_job.get_total_duration(),
             training_duration_seconds=training_job.get_training_duration(),
+            training_history=training_history,
         )
 
     def _to_training_job_summary_dto(
-        self, training_job: TrainingJob
+        self,
+        training_job: TrainingJob,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> TrainingJobSummaryDTO:
         """Convert TrainingJob entity to summary DTO."""
+
+        training_history = (
+            metadata.get("training_history") if isinstance(metadata, dict) else None
+        )
 
         return TrainingJobSummaryDTO(
             id=training_job.id,
@@ -657,4 +717,6 @@ class TrainingManagementUseCase:
             end_time=training_job.end_time,
             error=training_job.error,
             created_at=training_job.created_at,
+            metadata_artifact_id=training_job.metadata_artifact_id,
+            training_history=training_history,
         )

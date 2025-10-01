@@ -23,6 +23,12 @@ from .model_dto import (
     ModelUpdateDTO,
     RNNLayerDTO,
 )
+from .prediction_dto import (
+    ForecastPointDTO,
+    HistoricalPointDTO,
+    PredictionMetadataDTO,
+    PredictionResponseDTO,
+)
 from .training_dto import (
     DataCollectionJobDTO,
     StartTrainingResponseDTO,
@@ -55,4 +61,8 @@ __all__ = [
     "TrainingJobSummaryDTO",
     "DataCollectionJobDTO",
     "StartTrainingResponseDTO",
+    "PredictionResponseDTO",
+    "PredictionMetadataDTO",
+    "HistoricalPointDTO",
+    "ForecastPointDTO",
 ]

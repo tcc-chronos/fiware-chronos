@@ -16,6 +16,7 @@ from src.application.use_cases.health_use_cases import (
     GetApplicationInfoUseCase,
     GetHealthStatusUseCase,
 )
+from src.application.use_cases.model_prediction_use_case import ModelPredictionUseCase
 from src.application.use_cases.model_training_use_case import ModelTrainingUseCase
 from src.application.use_cases.model_use_cases import (
     CreateModelUseCase,
@@ -186,6 +187,17 @@ class AppContainer(containers.DeclarativeContainer):
     model_training_use_case = providers.Factory(
         ModelTrainingUseCase,
         artifacts_repository=model_artifacts_repository,
+    )
+
+    model_prediction_use_case = providers.Factory(
+        ModelPredictionUseCase,
+        model_repository=model_repository,
+        training_job_repository=training_job_repository,
+        artifacts_repository=model_artifacts_repository,
+        sth_gateway=sth_comet_gateway,
+        iot_agent_gateway=iot_agent_gateway,
+        fiware_service=providers.Object("smart"),
+        fiware_service_path=providers.Object("/"),
     )
 
     # Presentation
