@@ -3,332 +3,336 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.116.1-009688.svg)](https://fastapi.tiangolo.com/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-4.14-green.svg)](https://www.mongodb.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-7.x-green.svg)](https://www.mongodb.com/)
 
-## 📋 Índice
+## 📚 Table of Contents
 
-- [Sobre o Projeto](#-sobre-o-projeto)
-- [Arquitetura](#-arquitetura)
-- [Tecnologias Utilizadas](#-tecnologias-utilizadas)
-- [Instalação e Configuração](#-instalação-e-configuração)
-  - [Configuração do WSL (para usuários Windows)](#configuração-do-wsl-para-usuários-windows)
-  - [Configuração do Ambiente de Desenvolvimento](#configuração-do-ambiente-de-desenvolvimento)
-  - [Configuração do Docker](#configuração-do-docker)
-- [API Endpoints](#-api-endpoints)
-- [Modelos de Dados](#-modelos-de-dados)
-- [Desenvolvimento](#-desenvolvimento)
-- [Comandos Úteis](#-comandos-úteis)
-- [Licença](#-licença)
+- [Overview](#overview)
+- [Architecture & Components](#architecture--components)
+  - [Clean Architecture Layers](#clean-architecture-layers)
+- [Operational Flows](#operational-flows)
+  - [Model Lifecycle](#model-lifecycle)
+  - [Asynchronous Training](#asynchronous-training)
+  - [On-Demand Forecasts](#on-demand-forecasts)
+  - [Recurring Forecasts & Orion](#recurring-forecasts--orion)
+  - [Device Discovery](#device-discovery)
+- [Modeling & Persistence](#modeling--persistence)
+- [FIWARE Integrations](#fiware-integrations)
+- [Environment Preparation (Linux)](#environment-preparation-linux)
+- [Python Project Setup](#python-project-setup)
+- [Docker Execution](#docker-execution)
+- [Development Commands](#development-commands)
+- [Quality & Testing](#quality--testing)
+- [API & Documentation](#api--documentation)
+- [Observability & Logging](#observability--logging)
+- [Repository Structure](#repository-structure)
+- [License](#license)
 
-## 🚀 Sobre o Projeto
+## Overview
 
-**FIWARE Chronos** é um Generic Enabler (GE) para treinamento e implantação de modelos de deep learning integrado com a plataforma FIWARE. O projeto permite gerenciar configurações de modelos, treinar modelos com séries temporais provenientes do FIWARE STH-Comet, e realizar previsões usando os modelos treinados.
+**FIWARE Chronos** is a Generic Enabler (GE) focused on training and operating time-series forecasting models integrated with the FIWARE ecosystem. It provides:
 
-O sistema é projetado para facilitar a integração de soluções de machine learning com ecossistemas IoT baseados em FIWARE, permitindo:
+- End-to-end lifecycle management for LSTM/GRU models targeting sensors managed by Orion Context Broker.
+- Asynchronous training orchestration with parallel data collection from STH-Comet and TensorFlow processing.
+- On-demand forecasting along with automated scheduling of recurring predictions published to Orion.
+- Native integration with IoT Agent, STH-Comet, Orion, MongoDB/GridFS repositories, and Celery.
 
-- Gerenciamento completo de configurações de modelos de deep learning
-- Treinamento de modelos usando dados históricos de séries temporais
-- Previsões baseadas em modelos treinados
-- Integração com componentes FIWARE como Orion Context Broker e STH-Comet
+The repository aligns with FIWARE Generic Enabler guidelines, offering documentation, infrastructure scripts, observability (Grafana/Loki), and quality automation.
 
-## 🏗 Arquitetura
+## Architecture & Components
 
-O projeto segue os princípios da **Arquitetura Limpa (Clean Architecture)** e é organizado em camadas bem definidas:
+<img width="974" height="1025" alt="Chronos GE Architecture" src="https://github.com/user-attachments/assets/ef896d44-32df-437f-bf9a-262290983d4a" />
 
-### Estrutura de Camadas
+### Clean Architecture Layers
 
-- **Domain Layer (Camada de Domínio)**
-  Contém as entidades centrais e regras de negócio, independente de frameworks externos.
-  - `src/domain/entities/`: Definições das entidades como Model, ModelType, ModelStatus
-  - `src/domain/repositories/`: Interfaces para repositórios (portas)
-  - `src/domain/errors/`: Exceções específicas do domínio
+- **Domain:** Entities (`Model`, `TrainingJob`, `PredictionRecord`) and business rules with no external dependencies.
+- **Application:** Use cases (`TrainingManagementUseCase`, `ModelPredictionUseCase`, etc.) orchestrating flows between domain and infrastructure.
+- **Infrastructure:** MongoDB/GridFS repositories, FIWARE gateways (STH, Orion, IoT Agent), Celery orchestrator, and runtime settings.
+- **Presentation:** FastAPI controllers grouped by context (`models`, `training`, `predictions`, `devices`, `system`).
+- **Main:** `src/main` aggregates the dependency container and initializes the API/workers.
 
-- **Application Layer (Camada de Aplicação)**
-  Orquestra o fluxo de dados entre a camada de domínio e o exterior, implementando casos de uso.
-  - `src/application/dtos/`: Objetos de transferência de dados
-  - `src/application/use_cases/`: Implementação dos casos de uso
+See `docs/clean_architecture_db.md` for repository details and `docs/logging.md` for structured logging configuration.
 
-- **Infrastructure Layer (Camada de Infraestrutura)**
-  Implementa interfaces definidas na camada de domínio com tecnologias específicas.
-  - `src/infrastructure/database/`: Implementações de acesso à base de dados
-  - `src/infrastructure/repositories/`: Implementações concretas de repositórios
+## Operational Flows
 
-- **Presentation Layer (Camada de Apresentação)**
-  Lida com a interação do usuário e apresentação dos dados.
-  - `src/presentation/controllers/`: Endpoints da API REST
+### Model Lifecycle
 
-- **Main Layer (Camada Principal)**
-  Configura e inicializa a aplicação, conectando todas as camadas.
-  - `src/main/`: Configuração e inicialização da aplicação
+1. **Create** via `POST /models`, defining architecture, hyperparameters, and FIWARE metadata (entity, attribute, windows).
+2. **Update** (`PATCH /models/{id}`) to fine-tune RNN/Dense layers, validation/test ratios, and FIWARE information.
+3. **List** models with filters by status, type, entity, and feature.
+4. **Delete** removes associated artifacts and marks the model as unavailable.
 
-### Estrutura de Diretórios
+Models remain in `draft` until at least one training completes successfully, when they switch to `trained`.
 
-```
-fiware-chronos/
-├── deploy/                # Arquivos de implantação (Docker, etc.)
-├── docs/                  # Documentação
-├── scripts/               # Scripts utilitários
-├── src/                   # Código fonte principal
-│   ├── domain/            # Camada de domínio
-│   ├── application/       # Camada de aplicação
-│   ├── infrastructure/    # Camada de infraestrutura
-│   ├── presentation/      # Camada de apresentação
-│   └── main/              # Configuração e inicialização
-└── tests/                 # Testes
-```
+### Asynchronous Training
 
-## 🔧 Tecnologias Utilizadas
+```mermaid
+sequenceDiagram
+    participant Client as Client / Portal
+    participant API as Chronos API (FastAPI)
+    participant UseCase as TrainingManagementUseCase
+    participant Repo as MongoDB (Model & Training)
+    participant Orchestrator as CeleryTrainingOrchestrator
+    participant Workers as Celery Workers
+    participant STH as STH-Comet
 
-### Backend
-
-- **FastAPI** (v0.116.1): Framework web assíncrono de alta performance para construção de APIs
-- **Pydantic** (v2.11.7): Validação de dados e configurações
-- **MongoDB** (v4.14): Banco de dados NoSQL para armazenamento de modelos e dados
-- **Celery** (v5.5.3): Sistema de filas para processamento assíncrono (treinamento de modelos)
-- **Redis** (v6.4.0): Cache e broker para Celery
-- **RabbitMQ**: Message broker para comunicação entre serviços
-- **Dependency Injector** (v4.48.1): Container de injeção de dependências
-
-### Ferramentas de Desenvolvimento
-
-- **Python** (v3.12): Linguagem de programação principal
-- **Black** (v25.1.0): Formatador de código
-- **isort** (v6.0.1): Organizador de imports
-- **flake8** (v7.3.0): Linter de código
-- **mypy** (v1.17.1): Verificação estática de tipos
-- **pre-commit** (v4.3.0): Hooks de pré-commit para garantir qualidade do código
-
-### Integração FIWARE
-
-- **Orion Context Broker**: Gerenciamento de contexto
-- **STH-Comet**: Armazenamento de histórico de séries temporais
-
-## 💻 Instalação e Configuração
-
-### Configuração do WSL (para usuários Windows)
-
-Se estiver usando Windows, recomenda-se configurar o WSL (Windows Subsystem for Linux):
-
-```bash
-# Configurar WSL versão 2
-wsl --set-default-version 2
-wsl --install -d Ubuntu
-wsl --set-default Ubuntu
+    Client->>API: POST /models/{id}/training-jobs
+    API->>UseCase: start_training(model_id, last_n)
+    UseCase->>Repo: Fetch model and validate configuration
+    UseCase->>STH: Check fiware-total-count
+    UseCase->>Repo: Create TrainingJob (status = pending)
+    UseCase->>Orchestrator: dispatch_training_job(...)
+    Orchestrator->>Workers: Task orchestrate_training
+    Workers->>Repo: status -> collecting_data
+    Workers->>STH: collect_data_chunk (in parallel)
+    Workers->>Repo: Update chunks and metrics
+    Workers->>Workers: process_collected_data
+    Workers->>Repo: status -> preprocessing
+    Workers->>Workers: train_model_task
+    Workers->>Repo: Persist artifacts (GridFS) and metrics
+    Workers->>Repo: status -> completed / failed
+    API-->>Client: TrainingJob ID for tracking
 ```
 
-### Configuração do Ambiente de Desenvolvimento
+Key notes:
 
-```bash
-# Atualizar o sistema
+- Data is collected in chunks respecting `FIWARE_STH_MAX_PER_REQUEST`.
+- Artifacts are stored in GridFS (`model`, `x_scaler`, `y_scaler`, `metadata`).
+- Validation/test metrics (MAE, RMSE, R², etc.) are persisted in `training_jobs`.
+
+### On-Demand Forecasts
+
+```mermaid
+sequenceDiagram
+    participant Client as Client / Portal
+    participant API as Chronos API
+    participant UseCase as ModelPredictionUseCase
+    participant Repo as MongoDB/GridFS
+    participant STH as STH-Comet
+    participant IoT as IoT Agent
+
+    Client->>API: POST /models/{id}/training-jobs/{job}/predict
+    API->>UseCase: execute(model_id, training_job_id)
+    UseCase->>Repo: Load model and training job
+    UseCase->>Repo: Retrieve artifacts (GridFS)
+    UseCase->>IoT: Validate device status (if needed)
+    UseCase->>STH: Collect recent window (lookback_window)
+    UseCase->>UseCase: Scale data and infer forecast
+    UseCase-->>Client: Context window + forecast horizon
+```
+
+The response includes:
+
+- Context window used for inference.
+- Forecast series with inferred timestamps.
+- Relevant training metadata (best epoch, metrics).
+
+### Recurring Forecasts & Orion
+
+```mermaid
+sequenceDiagram
+    participant Beat as Celery Beat (scheduler)
+    participant Repo as TrainingJobRepository
+    participant Task as execute_forecast
+    participant UseCase as ModelPredictionUseCase
+    participant STH as STH-Comet
+    participant Orion as Orion Gateway
+
+    Beat->>Repo: get_prediction_ready_jobs()
+    Repo-->>Beat: List of eligible jobs
+    Beat->>Repo: claim_prediction_schedule()
+    Beat->>Task: enqueue execute_forecast
+    Task->>UseCase: prediction.execute(...)
+    UseCase->>STH: Fetch recent data
+    UseCase->>Repo: Retrieve artifacts (GridFS)
+    UseCase->>UseCase: Generate forecast
+    UseCase->>Orion: upsert_prediction()
+    Orion-->>Task: HTTP 204 confirmation
+    Task->>Repo: Update next schedule
+```
+
+Enabling (`POST /prediction-toggle`) ensures:
+
+- Automatic creation of service group and device in IoT Agent to publish `forecastSeries`.
+- Registration of a `Prediction` entity in Orion with an optional subscription for STH.
+- Persistence of `sampling_interval_seconds` for continuous scheduling.
+
+### Device Discovery
+
+- `GET /devices` integrates with IoT Agent (`/iot/devices`), grouping sensors by `entity_type`.
+- Helps operators select valid `entity_id`/`feature` pairs when creating models.
+- Supports configurable FIWARE headers (`fiware-service`, `fiware-servicepath`) via query parameters.
+
+## Modeling & Persistence
+
+| Layer | Storage | Description |
+|-------|---------|-------------|
+| Models | MongoDB `models` | Neural network configurations, hyperparameters, FIWARE metadata. |
+| Training Jobs | MongoDB `training_jobs` | Execution history, phases, metrics, scheduling, prediction flags. |
+| Artifacts | GridFS (`fs.files`/`fs.chunks`) | Keras weights (`.h5`), scalers (`joblib`), JSON metadata. |
+| Logs | Loki (Docker) / stdout | `structlog` structured logs with Promtail integration. |
+| Messaging | RabbitMQ + Redis | Broker and backend for Celery tasks. |
+
+Collections are indexed by frequent lookup fields (`id`, `model_id`). Infrastructure vs domain separation is detailed in `docs/clean_architecture_db.md`.
+
+## FIWARE Integrations
+
+| Component | Responsibility | Inputs/Outputs | Implementation |
+|-----------|----------------|----------------|----------------|
+| STH-Comet | Historical collection (`collect_data`, `fiware-total-count`) and forecast storage via subscription | `hLimit`, `hOffset`, `fiware-service` | `src/infrastructure/gateways/sth_comet_gateway.py`, task `collect_data_chunk` |
+| Orion Context Broker | Publishing forecasts (`forecastSeries`) and creating entities/subscriptions | `PredictionRecord` -> `/v2/entities`, `/v2/subscriptions` | `src/infrastructure/gateways/orion_gateway.py`, task `execute_forecast` |
+| IoT Agent | Discovering/provisioning devices and service groups for forecasts | `/iot/devices`, `/iot/services` | `src/infrastructure/gateways/iot_agent_gateway.py`, use case `TogglePredictionUseCase` |
+| IoT/Sensors | Original data source | NGSI-LD entities | Configured via Orion + IoT Agent |
+
+Configure FIWARE endpoints in `.env`:
+
+```
+FIWARE_ORION_URL=http://orion:1026
+FIWARE_STH_URL=http://sth-comet:8666
+FIWARE_IOT_AGENT_URL=http://iot-agent:4041
+FIWARE_SERVICE=smart
+FIWARE_SERVICE_PATH=/
+```
+
+## Environment Preparation (Linux)
+
+```
 sudo apt update && sudo apt -y upgrade
+sudo apt install -y git make build-essential python3 python3-venv python3-pip python3-dev \
+    libffi-dev libssl-dev libatlas-base-dev
+```
 
-# Instalar ferramentas necessárias
-sudo apt -y install git make build-essential python3 python3-venv python3-pip
+TensorFlow CPU relies on optimized floating-point instructions; ensure the host supports AVX. For GPU workloads, use custom images.
 
-# Clonar e acessar o repositório
+## Python Project Setup
+
+```
+# Clone the repository
 git clone https://github.com/tcc-chronos/fiware-chronos.git
 cd fiware-chronos
 
-# Criar ambiente virtual Python
+# Create and activate virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Instalar as dependências
+# Install dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
 
-# Habilitar os scripts
-chmod +x scripts/*.sh
+# Configure environment variables
+cp .env.example .env
+${EDITOR:-nano} .env  # Adjust FIWARE URLs, credentials, ports
 
-# Configurar hooks de pre-commit
+# Quality hooks
 pre-commit install
 pre-commit run --all-files
 ```
 
-### Configuração do Docker
+For local API development:
 
-Para executar o projeto com todas as suas dependências, utilize o Docker Compose:
+```
+make run  # uvicorn with reload and .env configuration
+```
 
-1. Certifique-se de ter o Docker e o Docker Compose instalados
-2. Copie o arquivo `.env.example` para `.env` e ajuste as configurações conforme necessário
-3. Execute o ambiente usando o comando:
+## Docker Execution
+
+1. Update `.env` with the URLs of your FIWARE ecosystem.
+2. Build and start the full stack (API, worker, scheduler, Mongo, RabbitMQ, Redis, Grafana, Loki, Promtail):
    ```bash
    make up ARGS="--build -d"
    ```
+3. To stop everything:
+   ```bash
+   make stop
+   ```
 
-## 📡 API Endpoints
+Available services:
 
-### Modelos
+- API: `http://localhost:${GE_PORT:-8000}`
+- RabbitMQ Management: `http://localhost:15672` (default user/password `chronos`)
+- Redis: `localhost:6379`
+- MongoDB: `mongodb://localhost:27017`
+- Grafana: `http://localhost:3000` (`admin/admin`)
+- Loki: `http://localhost:3100`
 
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/models` | Listar todos os modelos (paginado) |
-| GET | `/models/{model_id}` | Obter detalhes de um modelo específico |
-| POST | `/models` | Criar um novo modelo |
-| PATCH | `/models/{model_id}` | Atualizar um modelo existente |
-| DELETE | `/models/{model_id}` | Excluir um modelo |
+Celery workers use the queues:
 
-### Parâmetros de Consulta
+- `orchestration`: job control
+- `data_collection`: parallel STH collection
+- `forecast_execution`: automated predictions
 
-- **GET `/models`**:
-  - `skip` (int, opcional): Número de registros a pular (padrão: 0)
-  - `limit` (int, opcional): Número máximo de registros a retornar (padrão: 100)
-  - `model_type` (string, opcional): Filtrar por tipo de modelo (ex: 'lstm', 'gru')
-  - `model_status` (string, opcional): Filtrar por status do modelo (ex: 'draft', 'trained')
-  - `entity_id` (string, opcional): Filtrar por ID da entidade FIWARE
-  - `feature` (string, opcional): Filtrar por nome do atributo/característica
+## Development Commands
 
-### Exemplos de Uso
-
-#### Listar modelos com filtros
-
-```bash
-# Listar todos os modelos do tipo 'lstm' que estão treinados
-curl -X GET "http://localhost:8000/models?model_type=lstm&model_status=trained" \
-  -H "accept: application/json"
-
-# Buscar modelos para uma entidade específica e um atributo específico
-curl -X GET "http://localhost:8000/models?entity_id=urn:ngsi-ld:Device:001&feature=temperature" \
-  -H "accept: application/json"
 ```
-
-#### Criar um novo modelo
-
-```bash
-curl -X POST "http://localhost:8000/models" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Modelo de Previsão de Temperatura",
-    "description": "LSTM para previsão de temperatura",
-    "model_type": "lstm",
-    "dense_dropout": 0.2,
-    "rnn_dropout": 0,
-    "batch_size": 32,
-    "epochs": 100,
-    "learning_rate": 0.001,
-    "lookback_window": 24,
-    "forecast_horizon": 6,
-    "feature": "temperature",
-    "rnn_units": [128, 64],
-    "dense_units": [64, 32],
-    "entity_type": "Sensor",
-    "entity_id": "urn:ngsi-ld:Chronos:ESP32:001"
-    // early_stopping_patience is calculated automatically if not provided
-  }'
-```
-
-#### Atualizar um modelo existente
-
-```bash
-curl -X PATCH "http://localhost:8000/models/3fa85f64-5717-4562-b3fc-2c963f66afa6" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Modelo Atualizado de Temperatura",
-    "description": "Modelo atualizado para previsão de temperatura",
-    "rnn_units": [128, 64],
-    "dense_units": [64, 32],
-    "epochs": 150,
-    "batch_size": 64,
-    "rnn_dropout": 0.3,
-    "learning_rate": 0.0005,
-    "feature": "temperatura"
-  }'
-```
-
-## 📊 Modelos de Dados
-
-### ModelType (Enum)
-
-- `LSTM`: Modelo Long Short-Term Memory
-- `GRU`: Modelo Gated Recurrent Unit
-- `CNN_LSTM`: Modelo híbrido CNN-LSTM
-
-### ModelStatus (Enum)
-
-- `DRAFT`: Modelo criado mas não treinado
-- `TRAINING`: Modelo em processo de treinamento
-- `TRAINED`: Modelo treinado com sucesso
-- `ERROR`: Erro durante treinamento ou uso do modelo
-
-### Model
-
-Principais atributos:
-- `id`: Identificador único do modelo
-- `name`: Nome do modelo (opcional, será gerado se não fornecido)
-- `description`: Descrição do modelo (opcional, será gerado se não fornecido)
-- `model_type`: Tipo de arquitetura do modelo (LSTM, GRU, etc.)
-- `status`: Status atual do modelo
-
-Hiperparâmetros:
-- `rnn_dropout`: Taxa de dropout para conexões recorrentes nas camadas RNN
-- `dense_dropout`: Taxa de dropout para camadas densas
-- `batch_size`: Tamanho do batch para treinamento
-- `epochs`: Número de épocas de treinamento
-- `learning_rate`: Taxa de aprendizado
-- `validation_ratio`: Proporção de dados reservada para validação
-- `test_ratio`: Proporção de dados reservada para teste
-- `rnn_units`: Lista de unidades para cada camada RNN (obrigatório ter pelo menos um valor positivo)
-- `dense_units`: Lista de unidades para cada camada densa
-- `bidirectional`: Se deve usar camadas RNN bidirecionais
-- `early_stopping_patience`: Número de épocas sem melhoria para parar treinamento (calculado automaticamente se não fornecido)
-
-Configuração de entrada/saída:
-- `lookback_window`: Tamanho da janela de histórico
-- `forecast_horizon`: Horizonte de previsão
-- `feature`: Nome do atributo a ser previsto (do STH Comet)
-
-Configuração do FIWARE:
-- `entity_type`: Tipo da entidade no FIWARE
-- `entity_id`: ID da entidade no FIWARE
-
-Outros:
-- `metadata`: Metadados adicionais
-- `trainings`: Histórico de treinamentos do modelo
-
-## 🛠 Desenvolvimento
-
-### Adicionando Novos Componentes
-
-Para adicionar novos componentes, siga a estrutura de camadas da Clean Architecture:
-
-1. Defina as entidades na camada de domínio
-2. Crie interfaces (portas) para os novos componentes
-3. Implemente os casos de uso na camada de aplicação
-4. Adicione implementações concretas na camada de infraestrutura
-5. Exponha os recursos na camada de apresentação
-6. Conecte tudo na camada principal usando injeção de dependências
-
-### Executando Testes
-
-```bash
-# Executar testes unitários
-python -m pytest tests/unit
-
-# Executar testes de integração
-python -m pytest tests/integration
-
-# Executar testes e2e
-python -m pytest tests/e2e
-```
-
-## 📝 Comandos Úteis
-
-```bash
-# Iniciar os serviços em containers
-make up ARGS="--build -d"   # sobe docker compose com os parametros opcionais
-
-# Parar os containers
-make stop                   # interrompe os containers
-
-# Executar o servidor local com uvicorn
-make run                    # roda uvicorn local com env
-
-# Formatar o código (black + isort)
+make run                    # FastAPI server via uvicorn
+make up ARGS="--build -d"   # Spin up Docker stack (API + workers + deps)
+make stop                   # Stop active containers
 make format                 # black + isort
-
-# Verificar o código (flake8 + mypy)
 make lint                   # flake8 + mypy
+make test ARGS="-q"         # pytest with coverage
 ```
 
-## 📄 Licença
+Helper scripts live in `scripts/`:
 
-Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+- `scripts/run_api.sh`: starts the API using `.env` configuration.
+- `scripts/docker/docker_up.sh`: wrapper around `docker compose`.
+
+## Quality & Testing
+
+- **Lint/Type Check:** `make lint` (flake8 + mypy).
+- **Formatting:** `make format` (black + isort).
+- **Tests:** `make test` produces coverage reports under `htmlcov/index.html`.
+- **Pre-commit:** automatically runs on every commit (black, isort, flake8, mypy, pytest, detect-secrets if configured).
+
+Run `pre-commit run --all-files` after dependency updates.
+
+## API & Documentation
+
+- Interactive docs: `http://localhost:8000/docs`
+- OpenAPI schema (JSON): `http://localhost:8000/openapi.json`
+
+Core endpoints:
+
+| Resource | Method | Description |
+|----------|--------|-------------|
+| `/models` | GET/POST | List and create models |
+| `/models/{model_id}` | GET/PATCH/DELETE | Manage models |
+| `/models/types` | GET | Supported options (LSTM, GRU) |
+| `/models/{model_id}/training-jobs` | GET/POST | Training history and execution |
+| `/models/{model_id}/training-jobs/{training_job_id}` | GET | Job details |
+| `/models/{model_id}/training-jobs/{training_job_id}/predict` | POST | On-demand forecast |
+| `/models/{model_id}/training-jobs/{training_job_id}/prediction-toggle` | POST | Enable/disable recurring forecasts |
+| `/models/{model_id}/training-jobs/{training_job_id}/predictions/history` | GET | Retrieve STH-stored forecast history |
+| `/devices` | GET | Discover devices registered in IoT Agent |
+| `/health` | GET | Dependency health check |
+| `/info` | GET | Application metadata |
+
+## Observability & Logging
+
+- **Loki + Promtail:** collect structured logs from API and workers; configure Grafana dashboards using the Loki datasource.
+- **Grafana:** customizable dashboards for training metrics, queue consumption, and health checks. Default credentials `admin/admin`.
+- **Structured Logging:** powered by `structlog`, with optional JSON or plain text depending on `LOG_LEVEL`, `LOG_FORMAT`.
+- **Resource Monitoring:** RabbitMQ Management UI (`:15672`) to track queue usage and Celery jobs.
+
+## Repository Structure
+
+```
+fiware-chronos/
+├── deploy/                # Dockerfiles, docker-compose, observability
+├── docs/                  # Supplementary docs (Clean Architecture, logging)
+├── scripts/               # Utility scripts (docker, lint, run)
+├── src/
+│   ├── domain/            # Entities and repository/gateway contracts
+│   ├── application/       # Use cases (model, training, prediction, devices)
+│   ├── infrastructure/    # Mongo/GridFS repositories, FIWARE gateways, Celery tasks
+│   ├── presentation/      # FastAPI controllers
+│   └── main/              # Dependency container and bootstrapping
+├── tests/                 # Unit, integration, and e2e tests
+├── Makefile               # Automation commands
+├── requirements.txt       # Python dependencies
+└── .env.example           # Configuration base for FIWARE environments
+```
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.
