@@ -3,7 +3,7 @@
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone
-from statistics import mean
+from statistics import mean, median
 from typing import Any, Dict, List
 from uuid import UUID
 
@@ -171,6 +171,31 @@ def process_collected_data(
 
         merged_data.sort(key=lambda x: x["timestamp"])
 
+        sampling_interval_seconds = None
+        if len(merged_data) >= 2:
+            timestamp_deltas: List[float] = []
+            previous_ts = None
+            for entry in merged_data:
+                ts_raw = entry.get("timestamp")
+                if not ts_raw:
+                    continue
+                try:
+                    current_ts = datetime.fromisoformat(str(ts_raw))
+                except ValueError:
+                    logger.debug(
+                        "processing.invalid_timestamp",
+                        training_job_id=training_job_id,
+                        timestamp_value=ts_raw,
+                    )
+                    continue
+                if previous_ts is not None:
+                    delta_seconds = (current_ts - previous_ts).total_seconds()
+                    if delta_seconds > 0:
+                        timestamp_deltas.append(delta_seconds)
+                previous_ts = current_ts
+            if timestamp_deltas:
+                sampling_interval_seconds = int(median(timestamp_deltas))
+
         total_collected = len(merged_data)
         if total_collected == 0:
             logger.error(
@@ -251,6 +276,18 @@ def process_collected_data(
                 preprocessing_end=datetime.now(timezone.utc),
             )
         )
+
+        if sampling_interval_seconds:
+            next_prediction = None
+            if training_job and training_job.next_prediction_at is None:
+                next_prediction = datetime.now(timezone.utc)
+            asyncio.run(
+                training_job_repo.update_sampling_metadata(
+                    UUID(training_job_id),
+                    sampling_interval_seconds=int(sampling_interval_seconds),
+                    next_prediction_at=next_prediction,
+                )
+            )
 
         for chunk in failed_chunks:
             job_id = chunk.get("job_id")

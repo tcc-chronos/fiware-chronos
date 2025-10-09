@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
 import pytest
@@ -13,7 +13,14 @@ from src.application.use_cases.training_management_use_case import (
     TrainingManagementUseCase,
 )
 from src.domain.entities.errors import ModelValidationError
+from src.domain.entities.iot import (
+    DeviceAttribute,
+    IoTDevice,
+    IoTDeviceCollection,
+    IoTServiceGroup,
+)
 from src.domain.entities.model import Model, ModelStatus
+from src.domain.entities.prediction import PredictionRecord
 from src.domain.entities.time_series import HistoricDataPoint
 from src.domain.entities.training_job import (
     DataCollectionJob,
@@ -22,6 +29,8 @@ from src.domain.entities.training_job import (
     TrainingMetrics,
     TrainingStatus,
 )
+from src.domain.gateways.iot_agent_gateway import IIoTAgentGateway
+from src.domain.gateways.orion_gateway import IOrionGateway
 from src.domain.gateways.sth_comet_gateway import ISTHCometGateway
 from src.domain.ports.training_orchestrator import ITrainingOrchestrator
 from src.domain.repositories.model_artifacts_repository import (
@@ -68,6 +77,7 @@ class _TrainingJobRepository(ITrainingJobRepository):
         self.jobs: Dict[UUID, TrainingJob] = {}
         self.updated_status: List[TrainingStatus] = []
         self.task_refs: Dict[UUID, dict] = {}
+        self.prediction_schedule: Dict[UUID, datetime] = {}
 
     async def create(self, training_job: TrainingJob) -> TrainingJob:
         training_job.id = training_job.id or uuid4()
@@ -212,6 +222,68 @@ class _TrainingJobRepository(ITrainingJobRepository):
         job.metadata_artifact_id = metadata_artifact_id
         return True
 
+    async def update_sampling_metadata(
+        self,
+        training_job_id: UUID,
+        *,
+        sampling_interval_seconds: Optional[int],
+        next_prediction_at: Optional[datetime] = None,
+    ) -> bool:
+        job = self.jobs.get(training_job_id)
+        if not job:
+            return False
+        job.sampling_interval_seconds = sampling_interval_seconds
+        job.next_prediction_at = next_prediction_at
+        if next_prediction_at:
+            self.prediction_schedule[training_job_id] = next_prediction_at
+        return True
+
+    async def claim_prediction_schedule(
+        self,
+        training_job_id: UUID,
+        *,
+        expected_next_prediction_at: Optional[datetime],
+        next_prediction_at: datetime,
+    ) -> bool:
+        current = self.prediction_schedule.get(training_job_id)
+        if expected_next_prediction_at and current != expected_next_prediction_at:
+            return False
+        job = self.jobs.get(training_job_id)
+        if not job:
+            return False
+        job.next_prediction_at = next_prediction_at
+        self.prediction_schedule[training_job_id] = next_prediction_at
+        return True
+
+    async def update_prediction_schedule(
+        self,
+        training_job_id: UUID,
+        *,
+        next_prediction_at: datetime,
+    ) -> bool:
+        job = self.jobs.get(training_job_id)
+        if not job:
+            return False
+        job.next_prediction_at = next_prediction_at
+        self.prediction_schedule[training_job_id] = next_prediction_at
+        return True
+
+    async def get_prediction_ready_jobs(
+        self,
+        *,
+        reference_time: datetime,
+        limit: int = 50,
+    ) -> List[TrainingJob]:
+        ready: List[TrainingJob] = []
+        for job in self.jobs.values():
+            if (
+                job.next_prediction_at is not None
+                and job.next_prediction_at <= reference_time
+            ):
+                ready.append(job)
+        ready.sort(key=lambda job: job.next_prediction_at or datetime.max)
+        return ready[:limit]
+
 
 class _ArtifactsRepository(IModelArtifactsRepository):
     def __init__(
@@ -313,6 +385,165 @@ class _TrainingOrchestrator(ITrainingOrchestrator):
         self.cleanup.append((training_job_id, countdown_seconds))
 
 
+class _IoTAgentGateway(IIoTAgentGateway):
+    def __init__(self) -> None:
+        self.devices: Dict[str, IoTDevice] = {}
+        self.service_groups: Dict[Tuple[str, str], IoTServiceGroup] = {}
+        self.deleted_devices: List[str] = []
+
+    async def get_devices(
+        self, service: str = "smart", service_path: str = "/"
+    ) -> IoTDeviceCollection:
+        devices = [
+            device
+            for device in self.devices.values()
+            if device.service == service and device.service_path == service_path
+        ]
+        return IoTDeviceCollection(count=len(devices), devices=devices)
+
+    async def get_service_groups(
+        self, service: str = "smart", service_path: str = "/"
+    ) -> List[IoTServiceGroup]:
+        group = self.service_groups.get((service, service_path))
+        return [group] if group else []
+
+    async def ensure_service_group(
+        self,
+        *,
+        service: str,
+        service_path: str,
+        apikey: str,
+        entity_type: str,
+        resource: str,
+        cbroker: str,
+    ) -> IoTServiceGroup:
+        group = IoTServiceGroup(
+            apikey=apikey,
+            cbroker=cbroker,
+            entity_type=entity_type,
+            resource=resource,
+            service=service,
+            service_path=service_path,
+        )
+        self.service_groups[(service, service_path)] = group
+        return group
+
+    async def ensure_device(
+        self,
+        *,
+        device_id: str,
+        entity_name: str,
+        entity_type: str,
+        attributes: List[DeviceAttribute],
+        transport: str,
+        protocol: str,
+        service: str,
+        service_path: str,
+    ) -> IoTDevice:
+        device = IoTDevice(
+            device_id=device_id,
+            service=service,
+            service_path=service_path,
+            entity_name=entity_name,
+            entity_type=entity_type,
+            transport=transport,
+            protocol=protocol,
+            attributes=attributes,
+        )
+        self.devices[device_id] = device
+        return device
+
+    async def delete_device(
+        self,
+        device_id: str,
+        *,
+        service: str,
+        service_path: str,
+    ) -> None:
+        self.deleted_devices.append(device_id)
+        self.devices.pop(device_id, None)
+
+
+class _OrionGateway(IOrionGateway):
+    def __init__(self) -> None:
+        self.entities: Dict[str, Dict[str, Any]] = {}
+        self.subscriptions: Dict[str, Dict[str, Any]] = {}
+        self.deleted_entities: List[str] = []
+        self.deleted_subscriptions: List[str] = []
+
+    async def ensure_entity(
+        self,
+        *,
+        entity_id: str,
+        entity_type: str,
+        payload: Dict[str, Any],
+        service: str,
+        service_path: str,
+    ) -> None:
+        self.entities[entity_id] = {
+            "entity_type": entity_type,
+            "payload": payload,
+            "service": service,
+            "service_path": service_path,
+        }
+
+    async def upsert_prediction(
+        self,
+        prediction: PredictionRecord,
+        *,
+        service: str,
+        service_path: str,
+    ) -> None:
+        self.entities[prediction.entity_id] = {
+            "prediction": prediction,
+            "service": service,
+            "service_path": service_path,
+        }
+
+    async def create_subscription(
+        self,
+        *,
+        entity_id: str,
+        entity_type: str,
+        attrs: List[str],
+        notification_url: str,
+        service: str,
+        service_path: str,
+        attrs_format: str = "legacy",
+    ) -> str:
+        subscription_id = f"sub-{len(self.subscriptions)+1}"
+        self.subscriptions[subscription_id] = {
+            "entity_id": entity_id,
+            "entity_type": entity_type,
+            "attrs": attrs,
+            "notification_url": notification_url,
+            "service": service,
+            "service_path": service_path,
+            "attrs_format": attrs_format,
+        }
+        return subscription_id
+
+    async def delete_subscription(
+        self,
+        subscription_id: str,
+        *,
+        service: str,
+        service_path: str,
+    ) -> None:
+        self.deleted_subscriptions.append(subscription_id)
+        self.subscriptions.pop(subscription_id, None)
+
+    async def delete_entity(
+        self,
+        entity_id: str,
+        *,
+        service: str,
+        service_path: str,
+    ) -> None:
+        self.deleted_entities.append(entity_id)
+        self.entities.pop(entity_id, None)
+
+
 @pytest.fixture()
 def model(sample_model):
     model = sample_model
@@ -328,12 +559,16 @@ def use_case(model):
     artifacts = _ArtifactsRepository()
     gateway = _STHGateway(total=2000)
     orchestrator = _TrainingOrchestrator()
+    iot_gateway = _IoTAgentGateway()
+    orion_gateway = _OrionGateway()
     use_case = TrainingManagementUseCase(
         training_job_repository=training_repo,
         model_repository=repo,
         artifacts_repository=artifacts,
         sth_gateway=gateway,
         training_orchestrator=orchestrator,
+        iot_agent_gateway=iot_gateway,
+        orion_gateway=orion_gateway,
         fiware_service="smart",
         fiware_service_path="/",
     )

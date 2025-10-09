@@ -5,8 +5,10 @@ This module implements the STH-Comet gateway for collecting historical data
 from FIWARE Context Broker using the Short Term Historic API.
 """
 
+import base64
+import json
 from datetime import datetime
-from typing import List
+from typing import Any, List
 from urllib.parse import quote
 
 import httpx
@@ -251,17 +253,21 @@ class STHCometGateway(ISTHCometGateway):
                     # Convert to float
                     try:
                         value = float(attr_value)
-                    except (ValueError, TypeError):
-                        logger.warning(
-                            "sth_comet.value_conversion_failed",
-                            value=attr_value,
-                            attribute=attribute,
+                        collected_data.append(
+                            HistoricDataPoint(timestamp=timestamp, value=value)
                         )
-                        continue
-
-                    collected_data.append(
-                        HistoricDataPoint(timestamp=timestamp, value=value)
-                    )
+                    except (ValueError, TypeError):
+                        extra_points = self._parse_structured_value(
+                            attr_value, timestamp
+                        )
+                        if not extra_points:
+                            logger.warning(
+                                "sth_comet.value_conversion_failed",
+                                value=attr_value,
+                                attribute=attribute,
+                            )
+                            continue
+                        collected_data.extend(extra_points)
 
                 except Exception as e:
                     logger.warning(
@@ -285,3 +291,67 @@ class STHCometGateway(ISTHCometGateway):
                 exc_info=e,
             )
             raise STHCometError(f"Failed to parse STH-Comet response: {e}") from e
+
+    def _parse_structured_value(
+        self, attr_value: str, fallback_timestamp: datetime
+    ) -> List[HistoricDataPoint]:
+        parsed: Any
+
+        if isinstance(attr_value, (dict, list)):
+            parsed = attr_value
+        elif isinstance(attr_value, str):
+            decoded_text = attr_value
+            try:
+                padding = (-len(attr_value)) % 4
+                decoded_bytes = base64.urlsafe_b64decode(attr_value + ("=" * padding))
+                decoded_text = decoded_bytes.decode("utf-8")
+            except (ValueError, UnicodeDecodeError):
+                decoded_text = attr_value
+
+            try:
+                parsed = json.loads(decoded_text)
+            except (TypeError, ValueError):
+                return []
+        else:
+            return []
+
+        if isinstance(parsed, dict):
+            if "points" in parsed and isinstance(parsed["points"], list):
+                items = parsed["points"]
+            else:
+                items = []
+        elif isinstance(parsed, list):
+            items = parsed
+        else:
+            return []
+
+        points: List[HistoricDataPoint] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            raw_value = item.get("value")
+            if raw_value is None:
+                continue
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+
+            ts_raw = item.get("targetTimestamp") or item.get("timestamp")
+            if isinstance(ts_raw, str):
+                try:
+                    timestamp = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except ValueError:
+                    timestamp = fallback_timestamp
+            else:
+                timestamp = fallback_timestamp
+
+            points.append(
+                HistoricDataPoint(
+                    timestamp=timestamp,
+                    value=value,
+                    group_timestamp=fallback_timestamp,
+                )
+            )
+
+        return points

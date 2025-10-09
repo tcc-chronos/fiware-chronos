@@ -38,3 +38,15 @@ class IoTDeviceCollection:
 
     count: int
     devices: List[IoTDevice] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class IoTServiceGroup:
+    """Represents a service group registered in the IoT Agent."""
+
+    apikey: str
+    cbroker: str
+    entity_type: str
+    resource: str
+    service: str
+    service_path: str

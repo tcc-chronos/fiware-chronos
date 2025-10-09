@@ -44,6 +44,8 @@ def create_celery_app(
             "src.infrastructure.services.tasks.processing",
             "src.infrastructure.services.tasks.orchestration",
             "src.infrastructure.services.tasks.cleanup",
+            "src.infrastructure.services.tasks.forecast_scheduler",
+            "src.infrastructure.services.tasks.forecast_execution",
         ],
     )
 
@@ -62,6 +64,8 @@ def create_celery_app(
             "collect_data_chunk": {"queue": "data_collection"},
             "train_model_task": {"queue": "model_training"},
             "orchestrate_training": {"queue": "orchestration"},
+            "schedule_forecasts": {"queue": "forecast_scheduling"},
+            "execute_forecast": {"queue": "forecast_execution"},
         },
         # Worker configuration
         worker_prefetch_multiplier=1,
@@ -71,7 +75,14 @@ def create_celery_app(
         task_default_retry_delay=60,  # 1 minute
         task_max_retries=3,
         # Beat configuration (for periodic tasks if needed)
-        beat_schedule={},
+        beat_schedule={
+            "schedule-forecasts": {
+                "task": "schedule_forecasts",
+                "schedule": float(
+                    os.getenv("FORECAST_SCHEDULER_INTERVAL_SECONDS", "60")
+                ),
+            }
+        },
     )
 
     return app

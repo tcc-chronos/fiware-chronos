@@ -27,7 +27,9 @@ class GetDevicesUseCase:
 
     @inject
     def __init__(
-        self, iot_agent_gateway: IIoTAgentGateway = Provide["iot_agent_gateway"]
+        self,
+        iot_agent_gateway: IIoTAgentGateway = Provide["iot_agent_gateway"],
+        forecast_service_group: str = Provide["forecast_service_group"],
     ):
         """
         Initialize the use case with its dependencies.
@@ -36,6 +38,7 @@ class GetDevicesUseCase:
             iot_agent_gateway: Gateway for communicating with IoT Agent
         """
         self.iot_agent_gateway = iot_agent_gateway
+        self._forecast_service_group = forecast_service_group
 
     async def execute(
         self, service: str = "smart", service_path: str = "/"
@@ -76,6 +79,16 @@ class GetDevicesUseCase:
             grouped_devices: Dict[str, List[DeviceEntityDTO]] = defaultdict(list)
 
             for device in iot_agent_response.devices:
+                if (
+                    self._forecast_service_group
+                    and device.service == self._forecast_service_group
+                ):
+                    logger.debug(
+                        "devices.skip_forecast_group",
+                        entity_name=device.entity_name,
+                        service=device.service,
+                    )
+                    continue
                 # Extract attribute names from device attributes
                 attribute_names = [attr.name for attr in device.attributes]
 

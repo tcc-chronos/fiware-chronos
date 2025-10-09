@@ -7,7 +7,12 @@ from typing import Any, Dict, List
 import httpx
 from dependency_injector.wiring import inject
 
-from src.domain.entities.iot import DeviceAttribute, IoTDevice, IoTDeviceCollection
+from src.domain.entities.iot import (
+    DeviceAttribute,
+    IoTDevice,
+    IoTDeviceCollection,
+    IoTServiceGroup,
+)
 from src.domain.gateways.iot_agent_gateway import IIoTAgentGateway
 from src.shared import get_logger
 
@@ -105,11 +110,338 @@ class IoTAgentGateway(IIoTAgentGateway):
             )
             raise Exception(f"Unexpected error communicating with IoT Agent: {str(e)}")
 
+    async def get_service_groups(
+        self, service: str = "smart", service_path: str = "/"
+    ) -> List[IoTServiceGroup]:
+        """Retrieve service groups registered in the IoT Agent."""
+
+        url = f"{self.iot_agent_url}/iot/services"
+        headers = {
+            "fiware-service": service,
+            "fiware-servicepath": service_path,
+            "Content-Type": "application/json",
+        }
+
+        logger.info(
+            "iot_agent.service_groups.request",
+            url=url,
+            service=service,
+            service_path=service_path,
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+
+                payload = response.json()
+                services = payload.get("services") or []
+                return [
+                    self._parse_service_group(item, service, service_path)
+                    for item in services
+                    if item
+                ]
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "iot_agent.service_groups.http_error",
+                status_code=e.response.status_code,
+                response_text=e.response.text,
+                url=url,
+                exc_info=e,
+            )
+            raise Exception(
+                f"IoT Agent returned HTTP {e.response.status_code}: {e.response.text}"
+            )
+        except httpx.RequestError as e:
+            logger.error(
+                "iot_agent.service_groups.request_error",
+                error=str(e),
+                url=url,
+                exc_info=e,
+            )
+            raise Exception(f"Failed to retrieve service groups: {str(e)}")
+        except Exception as e:
+            logger.error(
+                "iot_agent.service_groups.unexpected_error",
+                error=str(e),
+                url=url,
+                exc_info=e,
+            )
+            raise Exception(f"Unexpected error retrieving service groups: {str(e)}")
+
+    async def ensure_service_group(
+        self,
+        *,
+        service: str,
+        service_path: str,
+        apikey: str,
+        entity_type: str,
+        resource: str,
+        cbroker: str,
+    ) -> IoTServiceGroup:
+        """Ensure a service group exists, creating it if necessary."""
+
+        existing_groups = await self.get_service_groups(
+            service=service, service_path=service_path
+        )
+        for group in existing_groups:
+            if group.apikey == apikey and group.resource == resource:
+                return group
+
+        url = f"{self.iot_agent_url}/iot/services"
+        headers = {
+            "fiware-service": service,
+            "fiware-servicepath": service_path,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "services": [
+                {
+                    "apikey": apikey,
+                    "cbroker": cbroker,
+                    "entity_type": entity_type,
+                    "resource": resource,
+                }
+            ]
+        }
+
+        logger.info(
+            "iot_agent.service_groups.create",
+            url=url,
+            payload=payload,
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+
+            return IoTServiceGroup(
+                apikey=apikey,
+                cbroker=cbroker,
+                entity_type=entity_type,
+                resource=resource,
+                service=service,
+                service_path=service_path,
+            )
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "iot_agent.service_groups.create_http_error",
+                status_code=e.response.status_code,
+                response_text=e.response.text,
+                url=url,
+                exc_info=e,
+            )
+            raise Exception(
+                f"IoT Agent returned HTTP {e.response.status_code}: {e.response.text}"
+            )
+        except httpx.RequestError as e:
+            logger.error(
+                "iot_agent.service_groups.create_request_error",
+                error=str(e),
+                url=url,
+                exc_info=e,
+            )
+            raise Exception(f"Failed to create service group: {str(e)}")
+        except Exception as e:
+            logger.error(
+                "iot_agent.service_groups.create_unexpected_error",
+                error=str(e),
+                url=url,
+                exc_info=e,
+            )
+            raise Exception(f"Unexpected error creating service group: {str(e)}")
+
+    async def ensure_device(
+        self,
+        *,
+        device_id: str,
+        entity_name: str,
+        entity_type: str,
+        attributes: List[DeviceAttribute],
+        transport: str,
+        protocol: str,
+        service: str,
+        service_path: str,
+    ) -> IoTDevice:
+        """Ensure an IoT device exists, creating it if necessary."""
+
+        existing = await self.get_devices(service=service, service_path=service_path)
+        for device in existing.devices:
+            if device.device_id == device_id or device.entity_name == entity_name:
+                return device
+
+        url = f"{self.iot_agent_url}/iot/devices"
+        headers = {
+            "fiware-service": service,
+            "fiware-servicepath": service_path,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "devices": [
+                {
+                    "device_id": device_id,
+                    "entity_name": entity_name,
+                    "entity_type": entity_type,
+                    "transport": transport,
+                    "protocol": protocol,
+                    "attributes": [
+                        {
+                            "object_id": attr.object_id,
+                            "name": attr.name,
+                            "type": attr.type,
+                        }
+                        for attr in attributes
+                    ],
+                }
+            ]
+        }
+
+        logger.info(
+            "iot_agent.device.create",
+            url=url,
+            device_id=device_id,
+            entity_name=entity_name,
+            entity_type=entity_type,
+            service=service,
+            service_path=service_path,
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+
+            return IoTDevice(
+                device_id=device_id,
+                service=service,
+                service_path=service_path,
+                entity_name=entity_name,
+                entity_type=entity_type,
+                transport=transport,
+                protocol=protocol,
+                attributes=attributes,
+            )
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "iot_agent.device.create_http_error",
+                device_id=device_id,
+                status_code=e.response.status_code,
+                response_text=e.response.text,
+                url=url,
+                service=service,
+                service_path=service_path,
+                exc_info=e,
+            )
+            raise Exception(
+                f"IoT Agent returned HTTP {e.response.status_code}: {e.response.text}"
+            )
+        except httpx.RequestError as e:
+            logger.error(
+                "iot_agent.device.create_request_error",
+                device_id=device_id,
+                error=str(e),
+                url=url,
+                service=service,
+                service_path=service_path,
+                exc_info=e,
+            )
+            raise Exception(f"Failed to create IoT device: {str(e)}")
+        except Exception as e:
+            logger.error(
+                "iot_agent.device.create_unexpected_error",
+                device_id=device_id,
+                error=str(e),
+                url=url,
+                service=service,
+                service_path=service_path,
+                exc_info=e,
+            )
+            raise Exception(f"Unexpected error creating IoT device: {str(e)}")
+
+    async def delete_device(
+        self,
+        device_id: str,
+        *,
+        service: str,
+        service_path: str,
+    ) -> None:
+        """Delete a device from the IoT Agent if it exists."""
+
+        url = f"{self.iot_agent_url}/iot/devices/{device_id}"
+        headers = {
+            "fiware-service": service,
+            "fiware-servicepath": service_path,
+            "Content-Type": "application/json",
+        }
+
+        logger.info(
+            "iot_agent.device.delete.request",
+            url=url,
+            device_id=device_id,
+            service=service,
+            service_path=service_path,
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.delete(url, headers=headers)
+                if response.status_code in (
+                    httpx.codes.NO_CONTENT,
+                    httpx.codes.NOT_FOUND,
+                ):
+                    return
+                response.raise_for_status()
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(
+                "iot_agent.device.delete_http_error",
+                device_id=device_id,
+                status_code=e.response.status_code,
+                response_text=e.response.text,
+                url=url,
+                service=service,
+                service_path=service_path,
+            )
+        except httpx.RequestError as e:
+            logger.warning(
+                "iot_agent.device.delete_request_error",
+                device_id=device_id,
+                error=str(e),
+                url=url,
+                service=service,
+                service_path=service_path,
+            )
+        except Exception as e:
+            logger.warning(
+                "iot_agent.device.delete_unexpected_error",
+                device_id=device_id,
+                error=str(e),
+                url=url,
+                service=service,
+                service_path=service_path,
+            )
+
     def _to_domain(self, payload: Dict[str, Any]) -> IoTDeviceCollection:
         count = int(payload.get("count", 0))
         devices_payload = payload.get("devices") or []
         devices = [self._parse_device(item) for item in devices_payload if item]
         return IoTDeviceCollection(count=count, devices=devices)
+
+    def _parse_service_group(
+        self, data: Dict[str, Any], service: str, service_path: str
+    ) -> IoTServiceGroup:
+        return IoTServiceGroup(
+            apikey=str(data.get("apikey", "")),
+            cbroker=str(data.get("cbroker", "")),
+            entity_type=str(data.get("entity_type", "")),
+            resource=str(data.get("resource", "")),
+            service=service,
+            service_path=service_path,
+        )
 
     def _parse_device(self, data: Dict[str, Any]) -> IoTDevice:
         return IoTDevice(

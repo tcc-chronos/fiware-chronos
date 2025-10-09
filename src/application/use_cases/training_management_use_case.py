@@ -27,6 +27,8 @@ from src.domain.entities.training_job import (
     TrainingJob,
     TrainingStatus,
 )
+from src.domain.gateways.iot_agent_gateway import IIoTAgentGateway
+from src.domain.gateways.orion_gateway import IOrionGateway
 from src.domain.gateways.sth_comet_gateway import ISTHCometGateway
 from src.domain.ports.training_orchestrator import ITrainingOrchestrator
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
@@ -53,6 +55,8 @@ class TrainingManagementUseCase:
         artifacts_repository: IModelArtifactsRepository,
         sth_gateway: ISTHCometGateway,
         training_orchestrator: ITrainingOrchestrator,
+        iot_agent_gateway: IIoTAgentGateway,
+        orion_gateway: IOrionGateway,
         fiware_service: str = "smart",
         fiware_service_path: str = "/",
     ):
@@ -69,6 +73,8 @@ class TrainingManagementUseCase:
         self.artifacts_repository = artifacts_repository
         self.sth_gateway = sth_gateway
         self.training_orchestrator = training_orchestrator
+        self.iot_agent_gateway = iot_agent_gateway
+        self.orion_gateway = orion_gateway
         self.fiware_service = fiware_service
         self.fiware_service_path = fiware_service_path
 
@@ -496,6 +502,8 @@ class TrainingManagementUseCase:
                     "is still running. Cancel it before deleting."
                 )
 
+            await self._cleanup_prediction_resources(training_job)
+
             artifact_ids = [
                 training_job.model_artifact_id,
                 training_job.x_scaler_artifact_id,
@@ -587,6 +595,49 @@ class TrainingManagementUseCase:
             raise TrainingManagementError(
                 f"Failed to delete training job: {str(e)}"
             ) from e
+
+    async def _cleanup_prediction_resources(self, training_job: TrainingJob) -> None:
+        """Remove prediction-related FIWARE resources for the training job."""
+
+        entity_id = (training_job.prediction_config.entity_id or "").strip()
+        if entity_id:
+            try:
+                await self.orion_gateway.delete_entity(
+                    entity_id=entity_id,
+                    service=self.fiware_service,
+                    service_path=self.fiware_service_path,
+                )
+            except Exception as exc:
+                raise TrainingManagementError(
+                    f"Failed to delete Orion entity {entity_id}: {exc}"
+                ) from exc
+
+        device_id = self._extract_prediction_device_id(training_job)
+        if device_id:
+            try:
+                await self.iot_agent_gateway.delete_device(
+                    device_id,
+                    service=self.fiware_service,
+                    service_path=self.fiware_service_path,
+                )
+            except Exception as exc:
+                raise TrainingManagementError(
+                    f"Failed to delete IoT Agent device {device_id}: {exc}"
+                ) from exc
+
+    def _extract_prediction_device_id(self, training_job: TrainingJob) -> Optional[str]:
+        metadata = training_job.prediction_config.metadata or {}
+        candidate_keys = (
+            "device_id",
+            "deviceId",
+            "iot_device_id",
+            "iotDeviceId",
+        )
+        for key in candidate_keys:
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
 
     async def _extract_training_metadata(
         self, training_job: TrainingJob
@@ -690,6 +741,10 @@ class TrainingManagementUseCase:
             metadata_artifact_id=training_job.metadata_artifact_id,
             error=training_job.error,
             error_details=training_job.error_details,
+            prediction_enabled=training_job.prediction_config.enabled,
+            prediction_entity_id=training_job.prediction_config.entity_id,
+            sampling_interval_seconds=training_job.sampling_interval_seconds,
+            next_prediction_at=training_job.next_prediction_at,
             created_at=training_job.created_at,
             updated_at=training_job.updated_at,
             total_duration_seconds=training_job.get_total_duration(),
@@ -719,4 +774,6 @@ class TrainingManagementUseCase:
             created_at=training_job.created_at,
             metadata_artifact_id=training_job.metadata_artifact_id,
             training_history=training_history,
+            prediction_enabled=training_job.prediction_config.enabled,
+            next_prediction_at=training_job.next_prediction_at,
         )

@@ -80,7 +80,8 @@ def main():
         [
             "worker",
             "--loglevel=info",
-            "--queues=data_collection,model_training,orchestration",
+            "--queues=data_collection,model_training,orchestration,"
+            "forecast_scheduling,forecast_execution",
             "--concurrency=2",  # Limit concurrency for ML workloads
             "--max-tasks-per-child=10",  # Restart workers for memory mgmt
         ]

@@ -197,6 +197,8 @@ def orchestrate_training(
                     "feature": model.feature,
                     "entity_type": model.entity_type,
                     "entity_id": model.entity_id,
+                    "lookback_window": model.lookback_window,
+                    "forecast_horizon": model.forecast_horizon,
                 },
                 window_size=window_size,
                 last_n=last_n,

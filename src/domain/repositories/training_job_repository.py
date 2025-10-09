@@ -115,3 +115,47 @@ class ITrainingJobRepository(ABC):
     ) -> bool:
         """Update task reference metadata for a training job."""
         pass
+
+    @abstractmethod
+    async def update_sampling_metadata(
+        self,
+        training_job_id: UUID,
+        *,
+        sampling_interval_seconds: Optional[int],
+        next_prediction_at: Optional[datetime] = None,
+    ) -> bool:
+        """Persist sampling interval and next prediction timestamp for a job."""
+        pass
+
+    @abstractmethod
+    async def claim_prediction_schedule(
+        self,
+        training_job_id: UUID,
+        *,
+        expected_next_prediction_at: Optional[datetime],
+        next_prediction_at: datetime,
+    ) -> bool:
+        """
+        Atomically claim a prediction slot by advancing the next execution timestamp.
+        """
+        pass
+
+    @abstractmethod
+    async def update_prediction_schedule(
+        self,
+        training_job_id: UUID,
+        *,
+        next_prediction_at: datetime,
+    ) -> bool:
+        """Update the next scheduled prediction timestamp."""
+        pass
+
+    @abstractmethod
+    async def get_prediction_ready_jobs(
+        self,
+        *,
+        reference_time: datetime,
+        limit: int = 50,
+    ) -> List[TrainingJob]:
+        """Fetch training jobs eligible for executing predictions."""
+        pass

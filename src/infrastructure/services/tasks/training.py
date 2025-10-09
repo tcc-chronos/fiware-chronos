@@ -167,6 +167,22 @@ def train_model_task(
         model.test_ratio = float(model_config.get("test_ratio", 0.15))
         model.entity_type = str(model_config.get("entity_type", ""))
         model.entity_id = str(model_config.get("entity_id", ""))
+        if "lookback_window" in model_config:
+            try:
+                model.lookback_window = int(model_config["lookback_window"])
+            except (TypeError, ValueError):
+                logger.warning(
+                    "training.model_config.invalid_lookback_window",
+                    value=model_config.get("lookback_window"),
+                )
+        if "forecast_horizon" in model_config:
+            try:
+                model.forecast_horizon = int(model_config["forecast_horizon"])
+            except (TypeError, ValueError):
+                logger.warning(
+                    "training.model_config.invalid_forecast_horizon",
+                    value=model_config.get("forecast_horizon"),
+                )
 
         data_points: List[HistoricDataPoint] = []
         for item in collected_data:

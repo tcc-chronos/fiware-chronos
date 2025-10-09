@@ -7,7 +7,7 @@ without dependencies on external frameworks or infrastructure.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -68,6 +68,20 @@ class TrainingMetrics:
 
 
 @dataclass
+class TrainingPredictionConfig:
+    """Configuration for recurring forecasting tied to a training job."""
+
+    enabled: bool = False
+    service_group: Optional[str] = None
+    entity_id: Optional[str] = None
+    entity_type: str = "Prediction"
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    subscription_id: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+@dataclass
 class TrainingJob:
     """Represents a training job for a deep learning model."""
 
@@ -104,6 +118,13 @@ class TrainingJob:
     # Error handling
     error: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
+
+    # Forecast automation
+    sampling_interval_seconds: Optional[int] = None
+    next_prediction_at: Optional[datetime] = None
+    prediction_config: TrainingPredictionConfig = field(
+        default_factory=TrainingPredictionConfig
+    )
 
     # Audit
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -167,3 +188,58 @@ class TrainingJob:
         if self.training_start and self.training_end:
             return (self.training_end - self.training_start).total_seconds()
         return None
+
+    def set_sampling_interval(self, seconds: int) -> None:
+        """Persist detected sampling interval in seconds."""
+        if seconds <= 0:
+            return
+        self.sampling_interval_seconds = seconds
+        if self.next_prediction_at is None:
+            self.next_prediction_at = datetime.now(timezone.utc)
+        self.update_timestamp()
+
+    def schedule_next_prediction(self, *, base_time: Optional[datetime] = None) -> None:
+        """Schedule the next prediction using the sampling interval."""
+        if self.sampling_interval_seconds is None:
+            return
+        reference = base_time or datetime.now(timezone.utc)
+        self.next_prediction_at = reference + timedelta(
+            seconds=self.sampling_interval_seconds
+        )
+        self.update_timestamp()
+
+    def enable_predictions(
+        self,
+        *,
+        service_group: str,
+        entity_id: str,
+        entity_type: str = "Prediction",
+        metadata: Optional[Dict[str, Any]] = None,
+        subscription_id: Optional[str] = None,
+    ) -> None:
+        """Activate recurring predictions for this training job."""
+
+        self.prediction_config.enabled = True
+        self.prediction_config.service_group = service_group
+        self.prediction_config.entity_id = entity_id
+        self.prediction_config.entity_type = entity_type
+        if metadata is not None:
+            self.prediction_config.metadata = metadata
+        if subscription_id is not None:
+            self.prediction_config.subscription_id = subscription_id
+        now = datetime.now(timezone.utc)
+        self.prediction_config.updated_at = now
+        if self.prediction_config.created_at is None:
+            self.prediction_config.created_at = now
+        if self.next_prediction_at is None:
+            self.next_prediction_at = now
+        self.update_timestamp()
+
+    def disable_predictions(self, *, clear_subscription: bool = False) -> None:
+        """Disable recurring predictions while keeping configuration data."""
+
+        self.prediction_config.enabled = False
+        self.prediction_config.updated_at = datetime.now(timezone.utc)
+        if clear_subscription:
+            self.prediction_config.subscription_id = None
+        self.update_timestamp()

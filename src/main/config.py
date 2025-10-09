@@ -95,6 +95,38 @@ class FiwareSettings(BaseSettings):
         description="Maximum records per STH-Comet request",
         alias="STH_MAX_PER_REQUEST",
     )
+    service: str = Field(
+        default="smart",
+        description="Default FIWARE service header value",
+    )
+    service_path: str = Field(
+        default="/",
+        description="Default FIWARE service path header",
+    )
+    forecast_service_group: str = Field(
+        default="Forecast",
+        description="Dedicated IoT Agent service group for forecast entities",
+    )
+    forecast_service_apikey: str = Field(
+        default="CHRONOS_FORECAST",
+        description="API key used for the forecast service group",
+    )
+    forecast_service_resource: str = Field(
+        default="/forecast",
+        description="Resource path associated with the forecast service group",
+    )
+    forecast_entity_type: str = Field(
+        default="Prediction",
+        description="Default entity type used for forecast entities in Orion",
+    )
+    forecast_device_transport: str = Field(
+        default="MQTT",
+        description="Transport protocol used when registering forecast devices",
+    )
+    forecast_device_protocol: str = Field(
+        default="PDI-IoTA-UltraLight",
+        description="IoT Agent protocol used when registering forecast devices",
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="FIWARE_", case_sensitive=False, extra="ignore"

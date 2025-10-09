@@ -73,3 +73,27 @@ async def test_get_application_info_use_case_sanitizes_urls() -> None:
     assert dto.extras["celery"]["result_backend"] == "redis://redis:6379/0"
     assert dto.extras["fiware"]["orion_url"] == "http://orion:1026"
     assert dto.dependencies[0].name == "mongo"
+
+
+def test_redact_url_returns_input_when_empty() -> None:
+    system_info = SystemInfo(
+        title="Chronos",
+        description="Chronos",
+        version="1.0",
+        environment="test",
+        git_commit="abc",
+        build_time="now",
+        celery_broker_url="",
+        celery_result_backend_url="",
+        fiware_orion_url="",
+        fiware_iot_agent_url="",
+        fiware_sth_url="",
+    )
+    use_case = GetApplicationInfoUseCase(
+        health_check_service=_StubHealthService(
+            SystemHealth(status=ServiceStatus.UP, dependencies=[])
+        ),
+        system_info=system_info,
+    )
+
+    assert use_case._redact_url("") == ""

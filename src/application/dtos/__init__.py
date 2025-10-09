@@ -26,8 +26,13 @@ from .model_dto import (
 from .prediction_dto import (
     ForecastPointDTO,
     HistoricalPointDTO,
+    PredictionHistoryPointDTO,
+    PredictionHistoryRequestDTO,
+    PredictionHistoryResponseDTO,
     PredictionMetadataDTO,
     PredictionResponseDTO,
+    PredictionToggleRequestDTO,
+    PredictionToggleResponseDTO,
 )
 from .training_dto import (
     DataCollectionJobDTO,
@@ -65,4 +70,9 @@ __all__ = [
     "PredictionMetadataDTO",
     "HistoricalPointDTO",
     "ForecastPointDTO",
+    "PredictionToggleRequestDTO",
+    "PredictionToggleResponseDTO",
+    "PredictionHistoryRequestDTO",
+    "PredictionHistoryResponseDTO",
+    "PredictionHistoryPointDTO",
 ]

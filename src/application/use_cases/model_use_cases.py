@@ -19,7 +19,9 @@ from src.domain.entities.model import (
     ModelType,
     RNNLayerConfig,
 )
-from src.domain.entities.training_job import TrainingMetrics
+from src.domain.entities.training_job import TrainingJob, TrainingMetrics
+from src.domain.gateways.iot_agent_gateway import IIoTAgentGateway
+from src.domain.gateways.orion_gateway import IOrionGateway
 from src.domain.repositories.model_artifacts_repository import IModelArtifactsRepository
 from src.domain.repositories.model_repository import IModelRepository
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
@@ -543,10 +545,18 @@ class DeleteModelUseCase:
         artifacts_repository: IModelArtifactsRepository = Provide[
             "model_artifacts_repository"
         ],
+        iot_agent_gateway: IIoTAgentGateway = Provide["iot_agent_gateway"],
+        orion_gateway: IOrionGateway = Provide["orion_gateway"],
+        fiware_service: str = Provide["config.fiware.service"],
+        fiware_service_path: str = Provide["config.fiware.service_path"],
     ):
         self.model_repository = model_repository
         self.training_job_repository = training_job_repository
         self.artifacts_repository = artifacts_repository
+        self.iot_agent_gateway = iot_agent_gateway
+        self.orion_gateway = orion_gateway
+        self.fiware_service = fiware_service
+        self.fiware_service_path = fiware_service_path
 
     async def execute(self, model_id: UUID) -> None:
         """
@@ -566,12 +576,56 @@ class DeleteModelUseCase:
         # Delete associated training jobs and artifacts before removing the model
         training_jobs = await self.training_job_repository.get_by_model_id(model_id)
         for training_job in training_jobs:
+            await self._cleanup_prediction_resources(training_job)
             await self.training_job_repository.delete(training_job.id)
 
         await self.artifacts_repository.delete_model_artifacts(model_id)
 
         # Delete the model
         await self.model_repository.delete(model_id)
+
+    async def _cleanup_prediction_resources(self, training_job: TrainingJob) -> None:
+        """Remove FIWARE resources associated with predictions for the training job."""
+
+        entity_id = (training_job.prediction_config.entity_id or "").strip()
+        if entity_id:
+            try:
+                await self.orion_gateway.delete_entity(
+                    entity_id=entity_id,
+                    service=self.fiware_service,
+                    service_path=self.fiware_service_path,
+                )
+            except Exception as exc:
+                raise ModelOperationError(
+                    f"Failed to delete Orion entity {entity_id}: {exc}"
+                ) from exc
+
+        device_id = self._extract_prediction_device_id(training_job)
+        if device_id:
+            try:
+                await self.iot_agent_gateway.delete_device(
+                    device_id,
+                    service=self.fiware_service,
+                    service_path=self.fiware_service_path,
+                )
+            except Exception as exc:
+                raise ModelOperationError(
+                    f"Failed to delete IoT Agent device {device_id}: {exc}"
+                ) from exc
+
+    def _extract_prediction_device_id(self, training_job: TrainingJob) -> Optional[str]:
+        metadata = training_job.prediction_config.metadata or {}
+        candidate_keys = (
+            "device_id",
+            "deviceId",
+            "iot_device_id",
+            "iotDeviceId",
+        )
+        for key in candidate_keys:
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
 
 
 class GetModelTypesUseCase:

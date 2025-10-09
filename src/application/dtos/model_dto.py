@@ -173,17 +173,22 @@ class ModelCreateDTO(BaseModel):
 
     @model_validator(mode="after")
     def calculate_early_stopping_patience(self) -> "ModelCreateDTO":
-        """Calculate early_stopping_patience if not provided."""
-        # If specific value is provided, use it
-        if self.early_stopping_patience is not None:
-            return self
-
-        # Smart default: around 10% of epochs, minimum 5, maximum 20
-        epochs = self.epochs
-        self.early_stopping_patience = min(max(int(epochs * 0.1), 5), 20)
+        """Populate derived defaults and validate ratios."""
+        if self.early_stopping_patience is None:
+            epochs = self.epochs
+            self.early_stopping_patience = min(max(int(epochs * 0.1), 5), 20)
 
         if self.validation_ratio + self.test_ratio >= 1.0:
             raise ValueError("validation_ratio + test_ratio must be less than 1.0")
+
+        if self.name is None and self.feature and self.model_type:
+            self.name = f"{self.model_type.value.upper()} - {self.feature}"
+
+        if self.description is None and self.feature and self.model_type:
+            self.description = (
+                f"{self.model_type.value.upper()} model for {self.feature} forecasting"
+            )
+
         return self
 
     model_config = {

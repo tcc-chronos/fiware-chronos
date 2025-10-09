@@ -90,6 +90,12 @@ class TrainingJobDTO(BaseModel):
     error: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
 
+    # Forecast automation
+    prediction_enabled: bool = False
+    prediction_entity_id: Optional[str] = None
+    sampling_interval_seconds: Optional[int] = None
+    next_prediction_at: Optional[datetime] = None
+
     # Audit
     created_at: datetime
     updated_at: datetime
@@ -112,6 +118,8 @@ class TrainingJobSummaryDTO(BaseModel):
     created_at: datetime
     metadata_artifact_id: Optional[str] = None
     training_history: Optional[Dict[str, Any]] = None
+    prediction_enabled: bool = False
+    next_prediction_at: Optional[datetime] = None
 
 
 class StartTrainingResponseDTO(BaseModel):

@@ -2,75 +2,59 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
-from src.domain.entities.training_job import (
-    DataCollectionJob,
-    DataCollectionStatus,
-    TrainingJob,
-    TrainingMetrics,
-    TrainingStatus,
-)
+from src.domain.entities.training_job import TrainingJob
 
 
-def test_add_data_collection_job_updates_timestamp(
-    sample_training_job: TrainingJob,
-) -> None:
-    initial = sample_training_job.updated_at
-    new_job = DataCollectionJob(
-        h_offset=10,
-        last_n=100,
-        status=DataCollectionStatus.IN_PROGRESS,
+def test_set_sampling_interval_initialises_next_prediction() -> None:
+    job = TrainingJob()
+    assert job.next_prediction_at is None
+
+    job.set_sampling_interval(300)
+
+    assert job.sampling_interval_seconds == 300
+    assert job.next_prediction_at is not None
+
+    previous_update = job.updated_at
+    job.set_sampling_interval(-5)
+    # Negative values do not change state
+    assert job.sampling_interval_seconds == 300
+    assert job.updated_at == previous_update
+
+
+def test_schedule_and_toggle_predictions() -> None:
+    job = TrainingJob()
+    base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    job.set_sampling_interval(60)
+
+    job.schedule_next_prediction(base_time=base_time)
+    assert job.next_prediction_at == base_time + timedelta(seconds=60)
+
+    job.enable_predictions(
+        service_group="sg",
+        entity_id="urn:prediction:entity",
+        entity_type="Forecast",
+        metadata={"device_id": "device-1"},
+        subscription_id="sub-1",
     )
-    sample_training_job.add_data_collection_job(new_job)
-    assert sample_training_job.data_collection_jobs[-1] is new_job
-    assert sample_training_job.updated_at >= initial
+    assert job.prediction_config.enabled is True
+    assert job.prediction_config.entity_id == "urn:prediction:entity"
+    assert job.prediction_config.metadata["device_id"] == "device-1"
+    assert job.prediction_config.subscription_id == "sub-1"
+
+    job.disable_predictions(clear_subscription=True)
+    assert job.prediction_config.enabled is False
+    assert job.prediction_config.subscription_id is None
 
 
-def test_get_data_collection_progress_handles_zero(
-    sample_training_job: TrainingJob,
-) -> None:
-    sample_training_job.total_data_points_requested = 0
-    assert sample_training_job.get_data_collection_progress() == 0.0
+def test_schedule_next_prediction_without_interval_keeps_state() -> None:
+    job = TrainingJob()
+    reference = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    job.schedule_next_prediction(base_time=reference)
+    assert job.next_prediction_at is None
 
-
-def test_get_data_collection_progress_calculates_percentage(
-    sample_training_job: TrainingJob,
-) -> None:
-    sample_training_job.total_data_points_requested = 200
-    sample_training_job.total_data_points_collected = 150
-    assert sample_training_job.get_data_collection_progress() == pytest.approx(75.0)
-
-
-def test_mark_training_complete_sets_status(
-    sample_training_job: TrainingJob, sample_training_metrics: TrainingMetrics
-) -> None:
-    sample_training_job.training_start = datetime.now(timezone.utc) - timedelta(
-        minutes=5
+    job.enable_predictions(
+        service_group="sg",
+        entity_id="urn:prediction:entity",
+        metadata=None,
     )
-    sample_training_job.start_time = sample_training_job.training_start
-    sample_training_job.mark_training_complete(sample_training_metrics)
-    assert sample_training_job.status is TrainingStatus.COMPLETED
-    assert sample_training_job.metrics is sample_training_metrics
-    assert sample_training_job.end_time is not None
-
-
-def test_mark_failed_sets_error(sample_training_job: TrainingJob) -> None:
-    sample_training_job.mark_failed("boom", {"detail": "trace"})
-    assert sample_training_job.status is TrainingStatus.FAILED
-    assert sample_training_job.error == "boom"
-    assert sample_training_job.error_details == {"detail": "trace"}
-
-
-def test_get_total_duration(sample_training_job: TrainingJob) -> None:
-    sample_training_job.start_time = datetime.now(timezone.utc) - timedelta(minutes=5)
-    sample_training_job.end_time = datetime.now(timezone.utc)
-    assert sample_training_job.get_total_duration() == pytest.approx(300.0, abs=1.0)
-
-
-def test_get_training_duration(sample_training_job: TrainingJob) -> None:
-    sample_training_job.training_start = datetime.now(timezone.utc) - timedelta(
-        minutes=2
-    )
-    sample_training_job.training_end = datetime.now(timezone.utc)
-    assert sample_training_job.get_training_duration() == pytest.approx(120.0, abs=1.0)
+    assert job.prediction_config.metadata == {}

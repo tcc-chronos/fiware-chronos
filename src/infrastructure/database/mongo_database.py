@@ -206,3 +206,21 @@ class MongoDatabase:
             )
         except pymongo.errors.OperationFailure as e:
             print(f"Warning: Failed to create indexes: {str(e)}")
+
+        training_collection = "training_jobs"
+        self._safe_drop_index(training_collection, "prediction_enabled_idx")
+        self._safe_drop_index(training_collection, "next_prediction_at_idx")
+
+        try:
+            self.db[training_collection].create_index(
+                "prediction_config.enabled",
+                name="prediction_enabled_idx",
+                background=True,
+            )
+            self.db[training_collection].create_index(
+                "next_prediction_at",
+                name="next_prediction_at_idx",
+                background=True,
+            )
+        except pymongo.errors.OperationFailure as e:
+            print(f"Warning: Failed to create training indexes: {str(e)}")

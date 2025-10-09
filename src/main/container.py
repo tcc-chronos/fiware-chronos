@@ -26,11 +26,16 @@ from src.application.use_cases.model_use_cases import (
     GetModelTypesUseCase,
     UpdateModelUseCase,
 )
+from src.application.use_cases.prediction_management_use_case import (
+    GetPredictionHistoryUseCase,
+    TogglePredictionUseCase,
+)
 from src.application.use_cases.training_management_use_case import (
     TrainingManagementUseCase,
 )
 from src.infrastructure.database import MongoDatabase
 from src.infrastructure.gateways.iot_agent_gateway import IoTAgentGateway
+from src.infrastructure.gateways.orion_gateway import OrionGateway
 from src.infrastructure.gateways.sth_comet_gateway import STHCometGateway
 from src.infrastructure.repositories.gridfs_model_artifacts_repository import (
     GridFSModelArtifactsRepository,
@@ -59,7 +64,7 @@ class AppContainer(containers.DeclarativeContainer):
     config = providers.Configuration()
     # Infrastructure
     mongo_database = providers.Singleton(
-        MongoDatabase,
+        lambda mongo_uri, db_name: MongoDatabase(mongo_uri=mongo_uri, db_name=db_name),
         mongo_uri=config.database.mongo_uri,
         db_name=config.database.database_name,
     )
@@ -96,6 +101,11 @@ class AppContainer(containers.DeclarativeContainer):
         base_url=config.fiware.sth_url,
     )
 
+    orion_gateway = providers.Singleton(
+        OrionGateway,
+        base_url=config.fiware.orion_url,
+    )
+
     # Application (use cases)
     get_models_use_case = providers.Factory(
         GetModelsUseCase,
@@ -127,11 +137,16 @@ class AppContainer(containers.DeclarativeContainer):
         model_repository=model_repository,
         training_job_repository=training_job_repository,
         artifacts_repository=model_artifacts_repository,
+        iot_agent_gateway=iot_agent_gateway,
+        orion_gateway=orion_gateway,
+        fiware_service=config.fiware.service,
+        fiware_service_path=config.fiware.service_path,
     )
 
     get_devices_use_case = providers.Factory(
         GetDevicesUseCase,
         iot_agent_gateway=iot_agent_gateway,
+        forecast_service_group=config.fiware.forecast_service_group,
     )
 
     health_check_service = providers.Singleton(
@@ -180,8 +195,10 @@ class AppContainer(containers.DeclarativeContainer):
         artifacts_repository=model_artifacts_repository,
         sth_gateway=sth_comet_gateway,
         training_orchestrator=training_orchestrator,
-        fiware_service=providers.Object("smart"),
-        fiware_service_path=providers.Object("/"),
+        iot_agent_gateway=iot_agent_gateway,
+        orion_gateway=orion_gateway,
+        fiware_service=config.fiware.service,
+        fiware_service_path=config.fiware.service_path,
     )
 
     model_training_use_case = providers.Factory(
@@ -196,8 +213,35 @@ class AppContainer(containers.DeclarativeContainer):
         artifacts_repository=model_artifacts_repository,
         sth_gateway=sth_comet_gateway,
         iot_agent_gateway=iot_agent_gateway,
-        fiware_service=providers.Object("smart"),
-        fiware_service_path=providers.Object("/"),
+        fiware_service=config.fiware.service,
+        fiware_service_path=config.fiware.service_path,
+    )
+
+    toggle_prediction_use_case = providers.Factory(
+        TogglePredictionUseCase,
+        model_repository=model_repository,
+        training_job_repository=training_job_repository,
+        iot_agent_gateway=iot_agent_gateway,
+        orion_gateway=orion_gateway,
+        fiware_service=config.fiware.service,
+        fiware_service_path=config.fiware.service_path,
+        forecast_service_group=config.fiware.forecast_service_group,
+        forecast_service_apikey=config.fiware.forecast_service_apikey,
+        forecast_service_resource=config.fiware.forecast_service_resource,
+        forecast_entity_type=config.fiware.forecast_entity_type,
+        orion_cb_url=config.fiware.orion_url,
+        sth_notification_url=config.fiware.sth_url,
+        forecast_device_transport=config.fiware.forecast_device_transport,
+        forecast_device_protocol=config.fiware.forecast_device_protocol,
+    )
+
+    get_prediction_history_use_case = providers.Factory(
+        GetPredictionHistoryUseCase,
+        model_repository=model_repository,
+        training_job_repository=training_job_repository,
+        sth_gateway=sth_comet_gateway,
+        fiware_service=config.fiware.service,
+        fiware_service_path=config.fiware.service_path,
     )
 
     # Presentation
@@ -256,8 +300,14 @@ async def app_lifespan():
     try:
         # Startup - MongoDB is already connected in __init__
         logger.info("container.mongo.ensure_connection")
-        # Create necessary indexes
-        await mongo_database.create_indexes()
+        # Create necessary indexes (best effort to avoid blocking startup in tests)
+        try:
+            await mongo_database.create_indexes()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning(
+                "container.mongo.create_indexes_failed",
+                error=str(exc),
+            )
 
         # Future Redis/Broker initialization
         # if redis_client and hasattr(redis_client, "connect"):

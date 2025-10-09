@@ -16,6 +16,7 @@ from src.domain.entities.training_job import (
     DataCollectionStatus,
     TrainingJob,
     TrainingMetrics,
+    TrainingPredictionConfig,
     TrainingStatus,
 )
 from src.domain.repositories.training_job_repository import ITrainingJobRepository
@@ -405,6 +406,146 @@ class TrainingJobRepository(ITrainingJobRepository):
             )
             raise e
 
+    async def update_sampling_metadata(
+        self,
+        training_job_id: UUID,
+        *,
+        sampling_interval_seconds: Optional[int],
+        next_prediction_at: Optional[datetime] = None,
+    ) -> bool:
+        """Persist sampling interval and next prediction timestamp for a job."""
+
+        try:
+            collection = self.database.get_collection(self.collection_name)
+            now = datetime.now(timezone.utc).isoformat()
+
+            update_fields: dict[str, Any] = {
+                "sampling_interval_seconds": sampling_interval_seconds,
+                "updated_at": now,
+            }
+
+            if next_prediction_at is not None:
+                update_fields["next_prediction_at"] = next_prediction_at.isoformat()
+
+            result = collection.update_one(
+                {"id": str(training_job_id)},
+                {"$set": update_fields},
+            )
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(
+                "Failed to update sampling metadata",
+                training_job_id=str(training_job_id),
+                error=str(e),
+            )
+            raise e
+
+    async def update_prediction_schedule(
+        self,
+        training_job_id: UUID,
+        *,
+        next_prediction_at: datetime,
+    ) -> bool:
+        """Update the next scheduled prediction timestamp."""
+
+        try:
+            collection = self.database.get_collection(self.collection_name)
+            result = collection.update_one(
+                {"id": str(training_job_id)},
+                {
+                    "$set": {
+                        "next_prediction_at": next_prediction_at.isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                },
+            )
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(
+                "Failed to update prediction schedule",
+                training_job_id=str(training_job_id),
+                error=str(e),
+            )
+            raise e
+
+    async def get_prediction_ready_jobs(
+        self,
+        *,
+        reference_time: datetime,
+        limit: int = 50,
+    ) -> List[TrainingJob]:
+        """Fetch training jobs eligible for executing predictions."""
+
+        try:
+            collection = self.database.get_collection(self.collection_name)
+
+            query = {
+                "prediction_config.enabled": True,
+                "next_prediction_at": {"$lte": reference_time.isoformat()},
+            }
+
+            cursor = (
+                collection.find(query)
+                .sort("next_prediction_at", 1)
+                .limit(max(limit, 1))
+            )
+
+            documents = list(cursor)
+            return [self._from_document(doc) for doc in documents]
+
+        except PyMongoError as e:
+            logger.error(
+                "Failed to fetch prediction-ready training jobs",
+                error=str(e),
+            )
+            raise e
+
+    async def claim_prediction_schedule(
+        self,
+        training_job_id: UUID,
+        *,
+        expected_next_prediction_at: Optional[datetime],
+        next_prediction_at: datetime,
+    ) -> bool:
+        """Attempt to atomically advance the next prediction timestamp."""
+
+        try:
+            collection = self.database.get_collection(self.collection_name)
+
+            match_filter: dict[str, Any] = {"id": str(training_job_id)}
+
+            if expected_next_prediction_at is None:
+                match_filter["$or"] = [
+                    {"next_prediction_at": {"$exists": False}},
+                    {"next_prediction_at": None},
+                ]
+            else:
+                match_filter["next_prediction_at"] = (
+                    expected_next_prediction_at.isoformat()
+                )
+
+            update_op = {
+                "$set": {
+                    "next_prediction_at": next_prediction_at.isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            }
+
+            result = collection.update_one(match_filter, update_op)
+            return result.modified_count == 1
+
+        except PyMongoError as e:
+            logger.error(
+                "Failed to claim prediction schedule",
+                training_job_id=str(training_job_id),
+                error=str(e),
+            )
+            raise e
+
     async def fail_training_job(
         self, training_job_id: UUID, error: str, error_details: Optional[dict] = None
     ) -> bool:
@@ -474,6 +615,25 @@ class TrainingJobRepository(ITrainingJobRepository):
         task_refs = dict(training_job.task_refs or {})
         task_refs.setdefault("data_collection_task_ids", [])
 
+        prediction_config = {
+            "enabled": training_job.prediction_config.enabled,
+            "service_group": training_job.prediction_config.service_group,
+            "entity_id": training_job.prediction_config.entity_id,
+            "entity_type": training_job.prediction_config.entity_type,
+            "metadata": training_job.prediction_config.metadata,
+            "subscription_id": training_job.prediction_config.subscription_id,
+            "created_at": (
+                training_job.prediction_config.created_at.isoformat()
+                if training_job.prediction_config.created_at
+                else None
+            ),
+            "updated_at": (
+                training_job.prediction_config.updated_at.isoformat()
+                if training_job.prediction_config.updated_at
+                else None
+            ),
+        }
+
         return {
             "id": str(training_job.id),
             "model_id": str(training_job.model_id) if training_job.model_id else None,
@@ -526,6 +686,13 @@ class TrainingJobRepository(ITrainingJobRepository):
             "metadata_artifact_id": training_job.metadata_artifact_id,
             "error": training_job.error,
             "error_details": training_job.error_details,
+            "sampling_interval_seconds": training_job.sampling_interval_seconds,
+            "next_prediction_at": (
+                training_job.next_prediction_at.isoformat()
+                if training_job.next_prediction_at
+                else None
+            ),
+            "prediction_config": prediction_config,
             "created_at": training_job.created_at.isoformat(),
             "updated_at": training_job.updated_at.isoformat(),
         }
@@ -596,6 +763,30 @@ class TrainingJobRepository(ITrainingJobRepository):
                 best_epoch=metrics_doc.get("best_epoch"),
             )
 
+        prediction_doc = document.get("prediction_config") or {}
+        prediction_config = TrainingPredictionConfig(
+            enabled=bool(prediction_doc.get("enabled", False)),
+            service_group=prediction_doc.get("service_group"),
+            entity_id=prediction_doc.get("entity_id"),
+            entity_type=prediction_doc.get("entity_type", "Prediction"),
+            metadata=prediction_doc.get("metadata") or {},
+            subscription_id=prediction_doc.get("subscription_id"),
+            created_at=(
+                datetime.fromisoformat(prediction_doc["created_at"])
+                if prediction_doc.get("created_at")
+                else None
+            ),
+            updated_at=(
+                datetime.fromisoformat(prediction_doc["updated_at"])
+                if prediction_doc.get("updated_at")
+                else None
+            ),
+        )
+
+        next_prediction_at = None
+        if document.get("next_prediction_at"):
+            next_prediction_at = datetime.fromisoformat(document["next_prediction_at"])
+
         return TrainingJob(
             id=UUID(document["id"]),
             model_id=UUID(document["model_id"]) if document.get("model_id") else None,
@@ -652,6 +843,9 @@ class TrainingJobRepository(ITrainingJobRepository):
             metadata_artifact_id=document.get("metadata_artifact_id"),
             error=document.get("error"),
             error_details=document.get("error_details"),
+            sampling_interval_seconds=document.get("sampling_interval_seconds"),
+            next_prediction_at=next_prediction_at,
+            prediction_config=prediction_config,
             created_at=datetime.fromisoformat(document["created_at"]),
             updated_at=datetime.fromisoformat(document["updated_at"]),
         )

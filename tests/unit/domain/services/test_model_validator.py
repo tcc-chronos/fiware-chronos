@@ -33,3 +33,15 @@ def test_validate_model_configuration_raises_detailed_errors(sample_model) -> No
     assert "RNN layer #1" in details[0]
     assert any("Batch size" in item for item in details)
     assert any("Feature attribute" in item for item in details)
+
+
+def test_validate_model_configuration_requires_layers(sample_model) -> None:
+    sample_model.rnn_layers = []
+    with pytest.raises(ModelValidationError):
+        validate_model_configuration(sample_model)
+
+
+def test_validate_model_configuration_checks_patience_bounds(sample_model) -> None:
+    sample_model.early_stopping_patience = 0
+    with pytest.raises(ModelValidationError):
+        validate_model_configuration(sample_model)
