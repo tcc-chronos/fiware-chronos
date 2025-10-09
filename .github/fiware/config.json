@@ -1,0 +1,16 @@
+{
+  "docker": {
+    "registry": "fiware",
+    "image": "chronos",
+    "source": {
+      "context": ".",
+      "dockerfile": "deploy/docker/Dockerfile",
+      "target": "api"
+    },
+    "scripts": {
+      "build": "deploy/docker/build.sh",
+      "test": "deploy/docker/test.sh",
+      "compose": "deploy/docker/docker-compose.yml"
+    }
+  }
+}

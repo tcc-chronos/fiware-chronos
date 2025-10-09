@@ -64,3 +64,5 @@ mypy==1.17.1       # Static type checker for Python
 pytest==8.4.2      # Testing framework
 pytest-asyncio==0.24.0  # Asyncio support for pytest
 pytest-cov==5.0.0  # Coverage plugin for pytest
+respx==0.21.1      # Mocked HTTPX endpoints for functional integration tests
+mkdocs==1.6.0      # Documentation builder for Read the Docs

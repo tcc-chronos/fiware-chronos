@@ -5,6 +5,8 @@ from __future__ import annotations
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.shared.env import load_secret_file_variables  # noqa: F401
+
 
 class _DatabaseSettings(BaseSettings):
     mongo_uri: str = Field(

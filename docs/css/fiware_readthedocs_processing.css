@@ -1,0 +1,33 @@
+/*
+  Minimal FIWARE Processing & Analysis chapter styling for Read the Docs.
+  Sources inspired by FIWARE doc.common assets.
+*/
+
+:root {
+  --fiware-primary: #88a1ce;
+  --fiware-secondary: #233c68;
+}
+
+.wy-nav-side,
+.rst-versions {
+  background-color: var(--fiware-primary);
+}
+
+.wy-nav-top {
+  background-color: var(--fiware-secondary);
+}
+
+a {
+  color: var(--fiware-secondary);
+}
+
+a:hover,
+a:focus {
+  color: var(--fiware-primary);
+}
+
+.wy-menu-vertical a:active,
+.wy-menu-vertical a:hover,
+.wy-menu-vertical a.current {
+  background-color: rgba(136, 161, 206, 0.2);
+}

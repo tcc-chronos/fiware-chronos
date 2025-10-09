@@ -12,6 +12,7 @@ from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.shared import EnumEnvironment, EnumLogLevel
+from src.shared.env import load_secret_file_variables  # noqa: F401
 
 
 class DatabaseSettings(BaseSettings):

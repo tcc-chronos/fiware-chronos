@@ -1,51 +1,49 @@
-# Configuração de Logging
+# Logging Configuration
 
-O FIWARE Chronos utiliza um sistema de logging flexível que pode ser configurado via variáveis de ambiente. O sistema suporta diferentes formatos de saída dependendo do ambiente de execução.
+Chronos uses `structlog` to produce structured application logs. Output format and verbosity are controlled via environment variables.
 
-## Configuração via Variáveis de Ambiente
+## Environment Variables
 
-| Variável | Descrição | Valor Padrão |
-|----------|-----------|--------------|
-| `LOG_LEVEL` | Nível de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO |
-| `LOG_FORMAT` | Formato de log para ambientes não-produção | %(asctime)s - %(name)s - %(levelname)s - %(message)s |
-| `LOG_FILE_PATH` | Caminho para arquivo de log (opcional) | None (log apenas para console) |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). | `INFO` |
+| `LOG_FORMAT` | Human-readable log format used in development. | `%(asctime)s - %(name)s - %(levelname)s - %(message)s` |
+| `LOG_FILE_PATH` | Optional file path for log output. | Console only |
 
-## Formatos de Log
+## Recommended Formats
 
-- **Ambiente de Desenvolvimento**: Logs formatados em texto simples e legível
-- **Ambiente de Produção**: Logs formatados em JSON para facilitar integração com ferramentas de análise
+- **Development** – plain text for readability.
+- **Production** – JSON output for log aggregation backends (Loki, ELK, etc.). Set `LOG_FORMAT=json`.
 
-## Exemplo de Uso
+## Usage Example
 
 ```python
 from src.shared import get_logger
 
-# Obter um logger estruturado
 logger = get_logger(__name__)
 
-# Logs simples
-logger.info("Operação iniciada")
-logger.debug("Valor da variável: x=10")
+logger.info("operation.started")
+logger.debug("operation.parameters", window=48, horizon=6)
 
-# Logs com contexto adicional
-logger.info("Requisição recebida", method="GET", path="/api/models")
-logger.error("Falha na operação", error_code=500, user_id="12345")
+logger.info("request.received", method="GET", path="/api/models")
+logger.error("forecast.publish.failed", error_code=500, entity_id="urn:ngsi-ld:Sensor:001")
 
-# Logger com contexto vinculado
 user_logger = logger.bind(user_id="12345", session_id="abc-123")
-user_logger.info("Usuário realizou login")
+user_logger.info("user.login.success")
 ```
 
-## Saída de Logs
+## Sample Output
 
-### Ambiente de Desenvolvimento
+### Development
+
 ```
-2023-09-14 10:15:32,123 - myapp.module - INFO - Operação iniciada
-2023-09-14 10:15:32,125 - myapp.module - INFO - Requisição recebida
+2025-01-15 10:15:32,123 - chronos.training - INFO - operation.started
+2025-01-15 10:15:32,125 - chronos.training - INFO - request.received method=GET path=/api/models
 ```
 
-### Ambiente de Produção
+### Production (JSON)
+
 ```json
-{"timestamp": "2023-09-14T10:15:32.123Z", "level": "INFO", "logger": "myapp.module", "message": "Operação iniciada", "app": "fiware-chronos"}
-{"timestamp": "2023-09-14T10:15:32.125Z", "level": "INFO", "logger": "myapp.module", "message": "Requisição recebida", "app": "fiware-chronos", "method": "GET", "path": "/api/models"}
+{"timestamp": "2025-01-15T10:15:32.123Z", "level": "INFO", "logger": "chronos.training", "event": "operation.started", "app": "fiware-chronos"}
+{"timestamp": "2025-01-15T10:15:32.125Z", "level": "INFO", "logger": "chronos.training", "event": "request.received", "method": "GET", "path": "/api/models"}
 ```

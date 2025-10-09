@@ -1,55 +1,47 @@
-# Clean Architecture - Separação de Responsabilidades no MongoDB
+# Clean Architecture – MongoDB Responsibility Split
 
-Este documento explica a abordagem adotada para separar as responsabilidades entre o repositório e o acesso direto à base de dados, seguindo os princípios da Clean Architecture.
+This document outlines how Chronos separates concerns between repositories and low-level database access, following Clean Architecture principles.
 
-## Estrutura Implementada
+## Implemented Structure
 
-### 1. MongoDatabase (src/infrastructure/database/mongo_database.py)
+### 1. `MongoDatabase` (`src/infrastructure/database/mongo_database.py`)
 
-Esta classe é responsável pela conexão e operações de baixo nível com o MongoDB:
+Responsibilities:
 
-- Gerenciamento da conexão com o MongoDB
-- Acesso direto às coleções
-- Operações CRUD básicas de baixo nível
-- Criação de índices
-- Não conhece entidades de domínio, apenas trabalha com dicionários (documentos)
+- Manage MongoDB connections and database lifecycle.
+- Expose direct collection accessors.
+- Provide low-level CRUD helpers.
+- Create indexes on start-up.
+- Remain agnostic of domain entities (operates on BSON dictionaries).
 
-### 2. MongoDBModelRepository (src/infrastructure/repositories/mongodb_model_repository.py)
+### 2. `ModelRepository` Implementation (`src/infrastructure/repositories/model_repository.py`)
 
-Esta classe implementa a interface `ModelRepository` e é responsável por:
+Responsibilities:
 
-- Usar o `MongoDatabase` para acessar o MongoDB
-- Converter entre entidades de domínio e documentos MongoDB
-- Implementar a lógica específica de acesso aos dados para as entidades de modelo
-- Lidar com erros específicos de domínio (ModelNotFoundError, ModelOperationError)
-- Definir índices específicos para o modelo
+- Depend on the `MongoDatabase` abstraction.
+- Convert between domain entities and MongoDB documents.
+- Apply domain-specific validation and error handling (`ModelNotFoundError`, `ModelOperationError`).
+- Define collection-specific indexes.
 
-## Benefícios da Separação
+## Benefits
 
-1. **Seguindo princípios SOLID**:
-   - Princípio de Responsabilidade Única (SRP): Cada classe tem uma única responsabilidade
-   - Princípio de Inversão de Dependência (DIP): O repositório depende de abstrações, não de implementações concretas
+1. **SOLID Alignment**
+   - Single Responsibility: Infrastructure and domain rules are isolated.
+   - Dependency Inversion: Application layer depends on interfaces, not MongoDB details.
+2. **Improved Testability**
+   - `MongoDatabase` can be mocked or replaced with `FakeMongoDatabase` during tests.
+   - Repository tests validate mapping logic without touching real infrastructure.
+3. **Reuse**
+   - Shared connection logic lives in `MongoDatabase` and is reused by other repositories.
+4. **Maintainability**
+   - Infrastructure changes (e.g., connection pooling) are contained.
+   - Domain rule changes do not leak into the database layer.
+5. **Clear Boundary**
+   - Domain → Repository interface → Infrastructure implementation.
 
-2. **Melhor Testabilidade**:
-   - MongoDatabase pode ser mockado facilmente para testes
-   - MongoDBModelRepository pode ser testado de forma isolada
-
-3. **Reutilização**:
-   - A classe MongoDatabase pode ser reutilizada por outros repositórios
-   - Funcionalidades comuns de acesso ao MongoDB estão centralizadas
-
-4. **Manutenibilidade**:
-   - Mudanças na lógica de acesso ao banco afetam apenas MongoDatabase
-   - Mudanças na lógica de negócios afetam apenas o repositório
-
-5. **Separação clara entre infraestrutura e domínio**:
-   - MongoDatabase é puramente infraestrutura
-   - MongoDBModelRepository conecta infraestrutura com domínio
-
-## Configuração no Container de DI
+## Dependency Injection Setup
 
 ```python
-# Configuração no container.py
 mongo_database = providers.Singleton(
     MongoDatabase,
     mongo_uri=config.database.mongo_uri,
@@ -57,17 +49,17 @@ mongo_database = providers.Singleton(
 )
 
 model_repository = providers.Singleton(
-    MongoDBModelRepository,
-    mongo_database=mongo_database,
+    ModelRepository,
+    database=mongo_database,
 )
 ```
 
-## Extensibilidade
+## Extensibility
 
-Esta estrutura permite adicionar novos repositórios de forma simples:
+To add a new repository:
 
-1. Crie uma nova interface de repositório na camada de domínio
-2. Implemente a interface usando o MongoDatabase
-3. Configure o novo repositório no container de DI
+1. Define an interface in `src/domain/repositories`.
+2. Implement the interface in `src/infrastructure/repositories`.
+3. Register the implementation in the DI container (`src/main/container.py`).
 
-Isso mantém a separação de responsabilidades e facilita a manutenção do código ao longo do tempo.
+This keeps new persistence logic consistent with existing components and prevents infrastructure leakage into the domain.

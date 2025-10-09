@@ -1,0 +1,37 @@
+site_name: FIWARE Chronos
+site_url: https://fiware-chronos.readthedocs.io
+site_description: FIWARE Generic Enabler for time-series forecasting integrated with Orion Context Broker.
+repo_name: tcc-chronos/fiware-chronos
+repo_url: https://github.com/tcc-chronos/fiware-chronos
+copyright: © Chronos contributors
+
+theme:
+  name: readthedocs
+
+extra_css:
+  - css/fiware_readthedocs_processing.css
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - attr_list
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Overview: user-guide/overview.md
+      - Quickstart API Walkthrough: user-guide/api-walkthrough.md
+  - Installation & Administration:
+      - Deployment: admin-guide/deployment.md
+      - Configuration: admin-guide/configuration.md
+      - Operations Checklist: admin-guide/operations.md
+  - Reference:
+      - API Reference: reference/api.md
+      - Environment Variables: reference/configuration.md
+  - Developer Guide:
+      - Architecture Overview: developer/architecture.md
+      - Testing & QA: developer/testing.md
+      - Clean Architecture Data Model: clean_architecture_db.md
+      - Logging & Observability: logging.md
