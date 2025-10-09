@@ -35,14 +35,18 @@ def train_model_task(
         model_record = asyncio.run(model_repo.find_by_id(model_id))
         if not model_record:
             return
+        target_status = status
+        if status == ModelStatus.DRAFT and model_record.has_trained_artifacts():
+            target_status = ModelStatus.TRAINED
         if (
-            status != ModelStatus.TRAINED
+            target_status != ModelStatus.TRAINED
             and model_record.has_trained_artifacts()
             and not allow_downgrade
         ):
             return
-
-        model_record.status = status
+        if model_record.status == target_status:
+            return
+        model_record.status = target_status
         model_record.update_timestamp()
         asyncio.run(model_repo.update(model_record))
 

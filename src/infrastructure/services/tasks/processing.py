@@ -32,7 +32,7 @@ def process_collected_data(
     training_job_repo = None
     model_repo = None
 
-    def revert_model_to_draft() -> None:
+    def restore_model_status() -> None:
         if training_job_repo is None or model_repo is None:
             return
         training_job = asyncio.run(training_job_repo.get_by_id(UUID(training_job_id)))
@@ -41,12 +41,14 @@ def process_collected_data(
         model_record = asyncio.run(model_repo.find_by_id(training_job.model_id))
         if not model_record:
             return
-        if (
-            model_record.status == ModelStatus.TRAINED
-            and model_record.has_trained_artifacts()
-        ):
+        target_status = (
+            ModelStatus.TRAINED
+            if model_record.has_trained_artifacts()
+            else ModelStatus.DRAFT
+        )
+        if model_record.status == target_status:
             return
-        model_record.status = ModelStatus.DRAFT
+        model_record.status = target_status
         model_record.update_timestamp()
         asyncio.run(model_repo.update(model_record))
 
@@ -75,7 +77,7 @@ def process_collected_data(
                 "Skipping data processing because training job was cancelled",
                 training_job_id=training_job_id,
             )
-            revert_model_to_draft()
+            restore_model_status()
             return {
                 "training_job_id": training_job_id,
                 "status": "cancelled",
@@ -110,7 +112,7 @@ def process_collected_data(
                 training_job_id=training_job_id,
                 failed_chunks=len(failed_chunks),
             )
-            revert_model_to_draft()
+            restore_model_status()
             asyncio.run(
                 training_job_repo.update_training_job_status(
                     UUID(training_job_id),
@@ -203,7 +205,7 @@ def process_collected_data(
                 training_job_id=training_job_id,
                 total_chunks=len(successful_chunks),
             )
-            revert_model_to_draft()
+            restore_model_status()
             asyncio.run(
                 training_job_repo.update_training_job_status(
                     UUID(training_job_id),
@@ -351,7 +353,7 @@ def process_collected_data(
             error=str(exc),
             exc_info=exc,
         )
-        revert_model_to_draft()
+        restore_model_status()
 
         try:
             if training_job_repo is not None:
