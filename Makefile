@@ -3,6 +3,9 @@
 up:
 	./scripts/docker/docker_up.sh $(ARGS)
 
+up-lite:
+	COMPOSE_PROFILES= ./scripts/docker/docker_up.sh $(ARGS)
+
 build:
 	./scripts/docker/docker_build.sh $(ARGS)
 
