@@ -186,3 +186,40 @@ async def test_get_devices_skips_forecast_service_group() -> None:
     response = await use_case.execute(service="smart", service_path="/")
 
     assert response.devices == []
+
+
+@pytest.mark.asyncio
+async def test_get_devices_skips_prediction_entity_type() -> None:
+    collection = IoTDeviceCollection(
+        count=2,
+        devices=[
+            IoTDevice(
+                device_id="prediction",
+                service="smart",
+                service_path="/",
+                entity_name="PredictionDevice",
+                entity_type="Prediction",
+                transport="mqtt",
+                protocol="MQTT",
+                attributes=[DeviceAttribute(object_id="t", name="temp", type="Number")],
+            ),
+            IoTDevice(
+                device_id="regular",
+                service="smart",
+                service_path="/",
+                entity_name="RegularDevice",
+                entity_type="Sensor",
+                transport="mqtt",
+                protocol="MQTT",
+                attributes=[DeviceAttribute(object_id="h", name="hum", type="Number")],
+            ),
+        ],
+    )
+    gateway = _StubGateway(collection)
+    use_case = GetDevicesUseCase(iot_agent_gateway=gateway)
+
+    response = await use_case.execute(service="smart", service_path="/")
+
+    assert len(response.devices) == 1
+    assert response.devices[0].entity_type == "Sensor"
+    assert response.devices[0].entities[0].entity_name == "RegularDevice"

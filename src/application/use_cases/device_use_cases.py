@@ -89,6 +89,13 @@ class GetDevicesUseCase:
                         service=device.service,
                     )
                     continue
+                if device.entity_type == "Prediction":
+                    logger.debug(
+                        "devices.skip_prediction_entity_type",
+                        entity_name=device.entity_name,
+                        entity_type=device.entity_type,
+                    )
+                    continue
                 # Extract attribute names from device attributes
                 attribute_names = [attr.name for attr in device.attributes]
 
