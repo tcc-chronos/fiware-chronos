@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from src.domain.entities.training_job import TrainingJob
+from src.domain.entities.training_job import (
+    TrainingJob,
+    TrainingMetrics,
+    TrainingStatus,
+)
 
 
 def test_set_sampling_interval_initialises_next_prediction() -> None:
@@ -58,3 +62,62 @@ def test_schedule_next_prediction_without_interval_keeps_state() -> None:
         metadata=None,
     )
     assert job.prediction_config.metadata == {}
+
+
+def test_data_collection_progress_and_exceptions() -> None:
+    job = TrainingJob()
+    job.total_data_points_requested = 200
+    job.total_data_points_collected = 50
+
+    assert job.get_data_collection_progress() == 25.0
+
+    job.total_data_points_requested = "invalid"  # type: ignore[assignment]
+    assert job.get_data_collection_progress() == 0.0
+
+
+def test_marking_phases_updates_state() -> None:
+    job = TrainingJob()
+    metrics = TrainingMetrics(mse=0.1)
+
+    job.mark_data_collection_complete()
+    job.mark_preprocessing_complete()
+    job.mark_training_complete(metrics=metrics)
+
+    assert job.metrics is metrics
+    assert job.status is TrainingStatus.COMPLETED
+    assert job.get_total_duration() is None or job.get_total_duration() >= 0.0
+
+
+def test_get_total_and_training_duration_calculations() -> None:
+    job = TrainingJob()
+    job.start_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    job.end_time = job.start_time + timedelta(hours=2)
+    job.training_start = job.start_time + timedelta(minutes=30)
+    job.training_end = job.training_start + timedelta(minutes=45)
+
+    assert job.get_total_duration() == 7200.0
+    assert job.get_training_duration() == 2700.0
+
+
+def test_mark_failed_sets_status_and_error_details() -> None:
+    job = TrainingJob()
+    job.mark_failed("boom", {"cause": "unexpected"})
+
+    assert job.status is TrainingStatus.FAILED
+    assert job.error == "boom"
+    assert job.error_details == {"cause": "unexpected"}
+    assert job.end_time is not None
+
+
+def test_disable_predictions_without_clearing_subscription() -> None:
+    job = TrainingJob()
+    job.enable_predictions(
+        service_group="sg",
+        entity_id="entity",
+        subscription_id="sub-1",
+    )
+
+    job.disable_predictions(clear_subscription=False)
+
+    assert job.prediction_config.enabled is False
+    assert job.prediction_config.subscription_id == "sub-1"
