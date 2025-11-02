@@ -55,4 +55,3 @@ Credentials and ports are defined in `.env` and `docker-compose.yml`. See `deplo
 - `GET /health` should report MongoDB, RabbitMQ, Redis connectivity.
 - Create a model (`POST /models`) and list it (`GET /models`).
 - Start a training job and monitor progress.
-

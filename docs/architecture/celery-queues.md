@@ -53,4 +53,3 @@ flowchart LR
 - Broker URL: `CELERY_BROKER_URL` (default: `amqp://chronos:chronos@rabbitmq:5672/chronos`).
 - Result backend: `CELERY_RESULT_BACKEND` (default: `redis://redis:6379/0`).
 - Worker tuning: `worker_prefetch_multiplier=1`, `task_acks_late=true`, `worker_max_tasks_per_child=100`.
-

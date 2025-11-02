@@ -88,4 +88,3 @@ sequenceDiagram
   Beat-->>Exec: enqueue execute_forecast
   Exec->>PredUC: run forecast + publish
 ```
-

@@ -45,4 +45,3 @@ This document summarizes Chronos infrastructure components and recommended confi
 
 - Set `LOG_FORMAT=json` and collect logs with Promtail to Loki; visualize in Grafana.
 - Add service dashboards for API latency, task throughput, failure rates, and queue depths.
-

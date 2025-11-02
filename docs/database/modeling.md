@@ -83,4 +83,3 @@ erDiagram
 - All timestamps stored in UTC.
 - UUIDs serialized as strings for compatibility.
 - Repository layer maps BSON documents to domain entities.
-

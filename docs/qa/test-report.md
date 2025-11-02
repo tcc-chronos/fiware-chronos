@@ -38,4 +38,3 @@ This template summarizes the results of a test cycle. Replace placeholders with 
 
 - coverage.xml, htmlcov/ (attach or link)
 - CI job URL: <link>
-

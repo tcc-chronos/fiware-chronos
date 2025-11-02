@@ -55,4 +55,3 @@ This document captures the functional and non-functional requirements for FIWARE
 - NGSI‑v2 for Orion and STH‑Comet integration; NGSI‑LD is planned.
 - MongoDB is the system of record; artifacts stored in GridFS.
 - RabbitMQ is the default Celery broker, Redis as result backend.
-

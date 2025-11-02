@@ -72,4 +72,3 @@ classDiagram
 ```
 
 Note: This logical diagram focuses on relationships and interfaces rather than exhaustive attributes.
-

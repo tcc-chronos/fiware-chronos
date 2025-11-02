@@ -44,4 +44,3 @@ flowchart LR
 ## Execution Flows
 
 See `sequence-diagrams.md` for detailed training, prediction, and scheduling flows.
-

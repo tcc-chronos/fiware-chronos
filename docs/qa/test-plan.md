@@ -48,4 +48,3 @@ mkdocs build       # validate documentation
 
 - External FIWARE instability → Use respx to mock HTTP endpoints in CI.
 - Long training tasks → Unit test with small synthetic datasets and seeded randoms.
-
