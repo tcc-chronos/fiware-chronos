@@ -49,11 +49,11 @@ User --> (UC8: Health & Info)
 
 - Description: Start a training job that collects data and trains a model.
 - Actors: API Client
-- Pre-conditions: Model exists; STH‑Comet reachable.
+- Pre-conditions: Model exists; STH-Comet reachable.
 - Post-conditions: Training job created; artifacts persisted; metrics recorded.
 - Main Flow:
   - POST `/models/{id}/training-jobs`
-  - Celery tasks: `collect_data_chunk` → `process_collected_data` → `train_model_task` → `cleanup_training_tasks`.
+  - Celery tasks: `collect_data_chunk` -> `process_collected_data` -> `train_model_task` -> `cleanup_training_tasks`.
 - Business Rules:
   - Training can be cancelled; status transitions preserved.
   - Data collection uses hLimit/hOffset windows; progress tracked.
@@ -69,7 +69,7 @@ User --> (UC8: Health & Info)
 - Business Rules:
   - Expose `status`, `metrics`, `start/end` times, and `error` details.
 
-## UC4: On‑demand Prediction
+## UC4: On-demand Prediction
 
 - Description: Generate forecast for latest context data.
 - Actors: API Client
@@ -77,7 +77,7 @@ User --> (UC8: Health & Info)
 - Post-conditions: Forecast published to Orion and optionally returned.
 - Main Flow:
   - POST `/models/{id}/training-jobs/{job_id}/predict`
-  - Load artifacts from GridFS; fetch window from STH‑Comet; infer; publish.
+  - Load artifacts from GridFS; fetch window from STH-Comet; infer; publish.
 - Business Rules:
   - Forecast horizon equals training configuration unless overridden by policy.
 
@@ -115,9 +115,9 @@ User --> (UC8: Health & Info)
 - Main Flow:
   - GET `/health`, `/info`
 
-## Cross‑cutting Business Rules
+## Cross-cutting Business Rules
 
 - Robust error handling with contextual logging.
 - Idempotent operations where feasible (entity/attribute upserts).
-- Coverage target ≥ 90%; changes must include tests.
+- Coverage target >= 90%; changes must include tests.
 
