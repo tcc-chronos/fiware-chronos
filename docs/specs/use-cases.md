@@ -5,31 +5,30 @@ This document describes primary use cases and the business rules governing them.
 ## Use Case Model
 
 ```mermaid
-%%{init: { 'theme': 'neutral' }}%%
-usecaseDiagram
-actor Admin as "Admin/Operator"
-actor User as "API Client"
+flowchart LR
+  actorAdmin[Admin/Operator]
+  actorUser[API Client]
 
-rectangle Chronos {
-  (UC1: Manage Models)
-  (UC2: Launch Training)
-  (UC3: Monitor Training)
-  (UC4: On-demand Prediction)
-  (UC5: Enable Recurring Forecasts)
-  (UC6: Publish to Orion)
-  (UC7: Discover Devices)
-  (UC8: Health & Info)
-}
+  subgraph Chronos
+    UC1([UC1: Manage Models])
+    UC2([UC2: Launch Training])
+    UC3([UC3: Monitor Training])
+    UC4([UC4: On-demand Prediction])
+    UC5([UC5: Enable Recurring Forecasts])
+    UC6([UC6: Publish to Orion])
+    UC7([UC7: Discover Devices])
+    UC8([UC8: Health & Info])
+  end
 
-User --> (UC1: Manage Models)
-User --> (UC2: Launch Training)
-User --> (UC3: Monitor Training)
-User --> (UC4: On-demand Prediction)
-Admin --> (UC5: Enable Recurring Forecasts)
-Admin --> (UC7: Discover Devices)
-User --> (UC8: Health & Info)
-(UC2: Launch Training) ..> (UC6: Publish to Orion) : includes
-(UC4: On-demand Prediction) ..> (UC6: Publish to Orion) : includes
+  actorUser --> UC1
+  actorUser --> UC2
+  actorUser --> UC3
+  actorUser --> UC4
+  actorAdmin --> UC5
+  actorAdmin --> UC7
+  actorUser --> UC8
+  UC2 -. includes .-> UC6
+  UC4 -. includes .-> UC6
 ```
 
 ## UC1: Manage Models
@@ -120,4 +119,3 @@ User --> (UC8: Health & Info)
 - Robust error handling with contextual logging.
 - Idempotent operations where feasible (entity/attribute upserts).
 - Coverage target >= 90%; changes must include tests.
-

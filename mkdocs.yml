@@ -39,7 +39,11 @@ markdown_extensions:
   - tables
   - attr_list
   - fenced_code
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
 plugins:
   - search

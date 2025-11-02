@@ -1,4 +1,4 @@
-mkdocs>=1.5.3
-mkdocs-material>=9.5.0
-mkdocs-mermaid2-plugin>=0.6.0
-pymdown-extensions>=10.8
+mkdocs>=1.6.1
+mkdocs-material>=9.6.23
+mkdocs-mermaid2-plugin>=1.2.3
+pymdown-extensions>=10.16.1
