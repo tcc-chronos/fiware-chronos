@@ -18,6 +18,10 @@ markdown_extensions:
   - tables
   - attr_list
 
+plugins:
+  - search
+  - mermaid2
+
 nav:
   - Home: index.md
   - User Guide:
