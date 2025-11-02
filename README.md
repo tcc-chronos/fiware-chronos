@@ -66,6 +66,25 @@ Comprehensive documentation is published on Read the Docs:
 - [API Reference](https://fiware-chronos.readthedocs.io/en/latest/reference/api/)
 - [Developer Topics](https://fiware-chronos.readthedocs.io/en/latest/developer/architecture/)
 
+### Technical Deliverables
+
+The repository includes a complete documentation set aligned with software engineering best practices:
+
+- Requirements Specification: `docs/specs/requirements.md`
+- Use Cases & Business Rules: `docs/specs/use-cases.md`
+- Database Modeling: `docs/database/modeling.md`
+- Celery/RabbitMQ Queues: `docs/architecture/celery-queues.md`
+- Architecture Diagrams: `docs/architecture/overview.md`
+- Class Diagram: `docs/architecture/class-diagram.md`
+- Sequence Diagrams: `docs/architecture/sequence-diagrams.md`
+- API Reference: `docs/reference/api.md`
+- Installation Manual: `docs/admin-guide/installation.md`
+- Infrastructure Configuration: `docs/infrastructure/configuration.md`
+- Test Plan: `docs/qa/test-plan.md`
+- Test Report Template: `docs/qa/test-report.md`
+
+All documents are organized for publication via MkDocs. See `mkdocs.yml` for the navigation tree.
+
 Documentation sources are stored under `docs/` and built via MkDocs with FIWARE Read the Docs CSS (see [`mkdocs.yml`](mkdocs.yml)).
 
 ## Getting Started

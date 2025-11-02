@@ -25,13 +25,28 @@ nav:
       - Quickstart API Walkthrough: user-guide/api-walkthrough.md
   - Installation & Administration:
       - Deployment: admin-guide/deployment.md
+      - Installation: admin-guide/installation.md
       - Configuration: admin-guide/configuration.md
       - Operations Checklist: admin-guide/operations.md
+  - Specifications:
+      - Requirements: specs/requirements.md
+      - Use Cases & Business Rules: specs/use-cases.md
   - Reference:
       - API Reference: reference/api.md
       - Environment Variables: reference/configuration.md
   - Developer Guide:
-      - Architecture Overview: developer/architecture.md
+      - Architecture Overview (Dev): developer/architecture.md
+      - Architecture Overview (Clean): architecture.md
+      - Architecture Diagrams: architecture/overview.md
+      - Class Diagram: architecture/class-diagram.md
+      - Sequence Diagrams: architecture/sequence-diagrams.md
+      - Celery Queues: architecture/celery-queues.md
+      - Database Modeling: database/modeling.md
       - Testing & QA: developer/testing.md
       - Clean Architecture Data Model: clean_architecture_db.md
       - Logging & Observability: logging.md
+  - Infrastructure:
+      - Configuration: infrastructure/configuration.md
+  - Quality Assurance:
+      - Test Plan: qa/test-plan.md
+      - Test Report Template: qa/test-report.md
