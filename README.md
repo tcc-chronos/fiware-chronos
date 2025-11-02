@@ -3,7 +3,6 @@
 [![FIWARE Chapter](https://img.shields.io/badge/FIWARE-Processing/Analysis-88a1ce.svg)](https://github.com/FIWARE/catalogue/tree/master/processing)
 [![FIWARE Generic Enabler](https://img.shields.io/badge/FIWARE-Generic_Enabler-0b7fab.svg)](https://www.fiware.org/developers/catalogue/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/TBD/badge)](https://bestpractices.coreinfrastructure.org/projects/TBD)
 [![Documentation](https://readthedocs.org/projects/fiware-chronos/badge/?version=latest)](https://fiware-chronos.readthedocs.io/en/latest/)
 [![CI](https://github.com/tcc-chronos/fiware-chronos/actions/workflows/ci.yml/badge.svg)](https://github.com/tcc-chronos/fiware-chronos/actions/workflows/ci.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/fiware/chronos.svg)](https://hub.docker.com/r/fiware/chronos)
@@ -13,7 +12,7 @@
 This project is part of [FIWARE](https://www.fiware.org/). For more information check the FIWARE Catalogue entry for
 [Processing & Analysis](https://github.com/Fiware/catalogue/tree/master/processing).
 
-| [Documentation](https://fiware-chronos.readthedocs.io/en/latest/) | [FIWARE Academy](https://fiware-academy.readthedocs.io/en/latest/) | [Smart Data Models](https://smartdatamodels.org/) | [FIWARE Helpdesk](https://helpdesk.fiware.org/) |
+| [Documentation](https://fiware-chronos.readthedocs.io/en/latest/) | [FIWARE Academy](https://fiware-academy.readthedocs.io/en/latest/) | [Smart Data Models](https://smartdatamodels.org/) |
 
 ## Contents
 
@@ -45,7 +44,10 @@ Chronos fits the **Processing & Analysis** FIWARE chapter and targets solutions 
 
 ## Architecture
 
-![Chronos Architecture](https://github.com/user-attachments/assets/ef896d44-32df-437f-bf9a-262290983d4a)
+![Chronos Architecture](https://github.com/user-attachments/assets/7711b3cb-5110-4442-b498-4747d78f6aea)
+
+![Chronos GE Clean Architecture](https://github.com/user-attachments/assets/559ae81f-57f3-4c7e-ade2-4d66714595df)
+
 
 Chronos follows Clean Architecture principles:
 
