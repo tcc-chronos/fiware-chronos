@@ -12,8 +12,8 @@ Chronos uses `structlog` to produce structured application logs. Output format a
 
 ## Recommended Formats
 
-- **Development** – plain text for readability.
-- **Production** – JSON output for log aggregation backends (Loki, ELK, etc.). Set `LOG_FORMAT=json`.
+- Development - plain text for readability.
+- Production - JSON output for log aggregation backends (Loki, ELK, etc.). Set `LOG_FORMAT=json`.
 
 ## Usage Example
 

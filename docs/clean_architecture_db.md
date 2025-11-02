@@ -1,4 +1,4 @@
-# Clean Architecture – MongoDB Responsibility Split
+# Clean Architecture - MongoDB Responsibility Split
 
 This document outlines how Chronos separates concerns between repositories and low-level database access, following Clean Architecture principles.
 
@@ -25,19 +25,19 @@ Responsibilities:
 
 ## Benefits
 
-1. **SOLID Alignment**
+1. SOLID Alignment
    - Single Responsibility: Infrastructure and domain rules are isolated.
    - Dependency Inversion: Application layer depends on interfaces, not MongoDB details.
-2. **Improved Testability**
+2. Improved Testability
    - `MongoDatabase` can be mocked or replaced with `FakeMongoDatabase` during tests.
    - Repository tests validate mapping logic without touching real infrastructure.
-3. **Reuse**
+3. Reuse
    - Shared connection logic lives in `MongoDatabase` and is reused by other repositories.
-4. **Maintainability**
+4. Maintainability
    - Infrastructure changes (e.g., connection pooling) are contained.
    - Domain rule changes do not leak into the database layer.
-5. **Clear Boundary**
-   - Domain → Repository interface → Infrastructure implementation.
+5. Clear Boundary
+   - Domain → Repository Interface → Infrastructure Implementation.
 
 ## Dependency Injection Setup
 
