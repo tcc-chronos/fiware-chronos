@@ -26,8 +26,9 @@ sequenceDiagram
   Worker->>Jobs: status=COLLECTING_DATA
   Worker->>STH: collect_data_chunk(... hLimit/hOffset ...)
   Worker->>Jobs: progress updates
-  Worker->>Worker: process_collected_data
   Worker->>Jobs: status=PREPROCESSING
+  Worker->>Worker: process_collected_data
+  Worker->>Jobs: status=TRAINING
   Worker->>Worker: train_model_task
   Worker->>GridFS: save_artifacts()
   Worker->>Jobs: complete_training_job(metrics)
