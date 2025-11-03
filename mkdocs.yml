@@ -59,6 +59,7 @@ nav:
   - User Guide:
       - Overview: user-guide/overview.md
       - Quickstart API Walkthrough: user-guide/api-walkthrough.md
+      - FIWARE Interoperability (NGSI): user-guide/fiware-interoperability.md
   - Installation & Administration:
       - Deployment: admin-guide/deployment.md
       - Installation: admin-guide/installation.md
