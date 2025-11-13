@@ -167,4 +167,3 @@ For convenience, this repository provides ready-to-run scripts under `examples/n
 - `create_subscription.py` — Creates a subscription in Orion pointing to STH‑Comet (if needed).
 
 Set environment variables (same as in cURL examples) before running the scripts.
-
