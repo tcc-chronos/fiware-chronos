@@ -145,7 +145,11 @@ class ModelTrainingUseCase:
 
             # Evaluate on test set
             test_metrics = self._evaluate_model(
-                model=model, x_test=x_test, y_test=y_test, y_scaler=y_scaler
+                model=model,
+                x_test=x_test,
+                y_test=y_test,
+                y_scaler=y_scaler,
+                forecast_horizon=model_config.forecast_horizon or 1,
             )
 
             end_time = time.time()
@@ -413,7 +417,12 @@ class ModelTrainingUseCase:
         return training_history, best_train_loss, best_val_loss
 
     def _evaluate_model(
-        self, model: Sequential, x_test: np.ndarray, y_test: np.ndarray, y_scaler
+        self,
+        model: Sequential,
+        x_test: np.ndarray,
+        y_test: np.ndarray,
+        y_scaler,
+        forecast_horizon: int = 1,
     ) -> dict:
         """Evaluate model on test set."""
 
@@ -426,11 +435,17 @@ class ModelTrainingUseCase:
         y_true = y_scaler.inverse_transform(y_test_scaled).ravel()
 
         # Calculate metrics
+        try:
+            horizon = int(forecast_horizon)
+        except (TypeError, ValueError):
+            horizon = 1
+        if horizon <= 0:
+            horizon = 1
         mse = float(mean_squared_error(y_true, y_pred))
         mae = float(mean_absolute_error(y_true, y_pred))
         rmse = float(np.sqrt(mse))
         r2 = float(r2_score(y_true, y_pred))
-        theil_u = self._calculate_theil_u(y_true, y_pred)
+        theil_u = self._calculate_theil_u(y_true, y_pred, horizon=horizon)
 
         # Calculate percentage metrics
         mae_pct, rmse_pct, mape = self._calculate_percentage_metrics(y_true, y_pred)
@@ -475,33 +490,49 @@ class ModelTrainingUseCase:
 
         return mae_pct, rmse_pct, mape
 
-    def _calculate_theil_u(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        """Calculate Theil's U statistic against a naïve (lag-1) forecast."""
+    def _calculate_theil_u(
+        self, y_true: np.ndarray, y_pred: np.ndarray, horizon: int = 1
+    ) -> float:
+        """
+        Calculate Theil's U statistic comparing the model to a naïve forecast
+        shifted by `horizon` steps.
+        """
 
-        if y_true.size < 2 or y_pred.size < 2:
+        try:
+            h = int(horizon)
+        except (TypeError, ValueError):
+            h = 1
+        if h <= 0:
+            h = 1
+
+        actual = np.asarray(y_true, dtype=float)
+        predicted = np.asarray(y_pred, dtype=float)
+
+        if actual.size <= h or predicted.size <= h:
             return float("nan")
 
-        actual = y_true.astype(float)
-        predicted = y_pred.astype(float)
+        actual_h = actual[h:]
+        predicted_h = predicted[h:]
+        naive_h = actual[:-h]
 
-        model_errors = actual[1:] - predicted[1:]
-        naive_errors = actual[1:] - actual[:-1]
+        model_sq_errors = (actual_h - predicted_h) ** 2
+        naive_sq_errors = (actual_h - naive_h) ** 2
 
-        finite_mask = np.isfinite(model_errors) & np.isfinite(naive_errors)
+        finite_mask = np.isfinite(model_sq_errors) & np.isfinite(naive_sq_errors)
         if not np.any(finite_mask):
             return float("nan")
 
-        model_errors = model_errors[finite_mask]
-        naive_errors = naive_errors[finite_mask]
+        model_sq_errors = model_sq_errors[finite_mask]
+        naive_sq_errors = naive_sq_errors[finite_mask]
 
-        denominator_mse = np.mean(naive_errors**2)
+        denominator_mse = np.mean(naive_sq_errors)
         if denominator_mse <= np.finfo(float).eps:
             return float("nan")
 
-        numerator_rmse = float(np.sqrt(np.mean(model_errors**2)))
+        numerator_rmse = float(np.sqrt(np.mean(model_sq_errors)))
         denominator_rmse = float(np.sqrt(denominator_mse))
 
-        return numerator_rmse / denominator_rmse
+        return float(numerator_rmse / denominator_rmse)
 
     async def _save_artifacts(
         self,
